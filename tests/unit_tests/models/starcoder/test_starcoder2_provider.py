@@ -38,7 +38,7 @@ class TestStarcoder2ModelProvider:
         assert provider.hidden_size == 768
         assert provider.num_attention_heads == 12
 
-        # Check Starcoder2-specific defaults
+        # Check Starcoder2-specific defaults + transformer config post init
         assert provider.normalization == "LayerNorm"
         assert provider.activation_func == F.gelu
         assert provider.add_bias_linear is True
@@ -49,27 +49,13 @@ class TestStarcoder2ModelProvider:
         assert provider.attention_dropout == 0.0
         assert provider.init_method_std == 0.01
         assert provider.share_embeddings_and_output_weights is False
-        assert provider.kv_channels is None
-        assert provider.num_query_groups is None
+        assert provider.kv_channels == 64
+        assert provider.num_query_groups == 12
         assert provider.window_size is None
         assert provider.attention_softmax_in_fp32 is True
         assert provider.bias_activation_fusion is True
         assert provider.bias_dropout_fusion is True
         assert provider.layernorm_epsilon == 1e-5
-
-    def test_starcoder2_model_provider_inheritance(self):
-        """Test Starcoder2ModelProvider inherits from GPTModelProvider."""
-        from megatron.bridge.models.gpt_provider import GPTModelProvider
-
-        provider = Starcoder2ModelProvider(
-            num_layers=12,
-            hidden_size=768,
-            num_attention_heads=12,
-        )
-
-        assert isinstance(provider, GPTModelProvider)
-        assert hasattr(provider, "provide")
-        assert callable(provider.provide)
 
 
 class TestStarcoder2ModelProvider3B:
@@ -98,20 +84,11 @@ class TestStarcoder2ModelProvider3B:
         assert provider.hidden_dropout == 0.0
         assert provider.attention_dropout == 0.0
         assert provider.share_embeddings_and_output_weights is False
-        assert provider.kv_channels is None
         assert provider.window_size is None
         assert provider.attention_softmax_in_fp32 is True
         assert provider.bias_activation_fusion is True
         assert provider.bias_dropout_fusion is True
         assert provider.layernorm_epsilon == 1e-5
-
-    def test_starcoder2_3b_inheritance(self):
-        """Test Starcoder2ModelProvider3B inherits from Starcoder2ModelProvider."""
-        provider = Starcoder2ModelProvider3B()
-
-        assert isinstance(provider, Starcoder2ModelProvider)
-        assert hasattr(provider, "provide")
-        assert callable(provider.provide)
 
 
 class TestStarcoder2ModelProvider7B:
@@ -140,20 +117,12 @@ class TestStarcoder2ModelProvider7B:
         assert provider.hidden_dropout == 0.0
         assert provider.attention_dropout == 0.0
         assert provider.share_embeddings_and_output_weights is False
-        assert provider.kv_channels is None
+        assert provider.kv_channels is 128
         assert provider.window_size is None
         assert provider.attention_softmax_in_fp32 is True
         assert provider.bias_activation_fusion is True
         assert provider.bias_dropout_fusion is True
         assert provider.layernorm_epsilon == 1e-5
-
-    def test_starcoder2_7b_inheritance(self):
-        """Test Starcoder2ModelProvider7B inherits from Starcoder2ModelProvider."""
-        provider = Starcoder2ModelProvider7B()
-
-        assert isinstance(provider, Starcoder2ModelProvider)
-        assert hasattr(provider, "provide")
-        assert callable(provider.provide)
 
 
 class TestStarcoder2ModelProvider15B:
@@ -182,20 +151,12 @@ class TestStarcoder2ModelProvider15B:
         assert provider.hidden_dropout == 0.0
         assert provider.attention_dropout == 0.0
         assert provider.share_embeddings_and_output_weights is False
-        assert provider.kv_channels is None
+        assert provider.kv_channels == 128
         assert provider.window_size is None
         assert provider.attention_softmax_in_fp32 is True
         assert provider.bias_activation_fusion is True
         assert provider.bias_dropout_fusion is True
         assert provider.layernorm_epsilon == 1e-5
-
-    def test_starcoder2_15b_inheritance(self):
-        """Test Starcoder2ModelProvider15B inherits from Starcoder2ModelProvider."""
-        provider = Starcoder2ModelProvider15B()
-
-        assert isinstance(provider, Starcoder2ModelProvider)
-        assert hasattr(provider, "provide")
-        assert callable(provider.provide)
 
 
 class TestStarcoder2ProviderInheritance:

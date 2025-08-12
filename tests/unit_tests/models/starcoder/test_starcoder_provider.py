@@ -47,25 +47,11 @@ class TestStarcoderModelProvider:
         assert provider.init_method_std == 0.01
         assert provider.layernorm_epsilon == 1e-5
         assert provider.share_embeddings_and_output_weights is False
-        assert provider.kv_channels is None
+        assert provider.kv_channels == 64
         assert provider.num_query_groups == 1
         assert provider.attention_softmax_in_fp32 is True
         assert provider.bias_activation_fusion is True
         assert provider.bias_dropout_fusion is True
-
-    def test_starcoder_model_provider_inheritance(self):
-        """Test StarcoderModelProvider inherits from GPTModelProvider."""
-        from megatron.bridge.models.gpt_provider import GPTModelProvider
-
-        provider = StarcoderModelProvider(
-            num_layers=12,
-            hidden_size=768,
-            num_attention_heads=12,
-        )
-
-        assert isinstance(provider, GPTModelProvider)
-        assert hasattr(provider, "provide")
-        assert callable(provider.provide)
 
 
 class TestStarcoderConfig15B:
@@ -92,19 +78,11 @@ class TestStarcoderConfig15B:
         assert provider.attention_dropout == 0.2
         assert provider.layernorm_epsilon == 1e-5
         assert provider.share_embeddings_and_output_weights is False
-        assert provider.kv_channels is None
+        assert provider.kv_channels == 128
         assert provider.num_query_groups == 1
         assert provider.attention_softmax_in_fp32 is True
         assert provider.bias_activation_fusion is True
         assert provider.bias_dropout_fusion is True
-
-    def test_starcoder_config_15b_inheritance(self):
-        """Test StarcoderConfig15B inherits from StarcoderModelProvider."""
-        provider = StarcoderConfig15B()
-
-        assert isinstance(provider, StarcoderModelProvider)
-        assert hasattr(provider, "provide")
-        assert callable(provider.provide)
 
 
 class TestStarcoderProviderInheritance:
@@ -120,9 +98,6 @@ class TestStarcoderProviderInheritance:
 
     def test_provide_method_inherited(self):
         """Test that provide method works correctly in inherited classes."""
-        # Test with StarcoderConfig15B
         provider = StarcoderConfig15B()
-
-        # The provide method should be inherited from GPTModelProvider
         assert hasattr(provider, "provide")
         assert callable(provider.provide)
