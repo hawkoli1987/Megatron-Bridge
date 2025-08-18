@@ -85,6 +85,7 @@ class MockTokenizerConfig:
 class TestNumFloatingPointOperations:
     """Test cases for num_floating_point_operations function."""
 
+    
     def test_standard_transformer_model(self):
         """Test FLOPs calculation for a standard Transformer model."""
         # Create mock config

@@ -15,7 +15,9 @@
 import torch.nn.functional as F
 
 from megatron.bridge.training.config import ConfigContainer
+from megatron.bridge.utils.decorators import experimental_fn
 
+@experimental_fn
 def num_floating_point_operations(cfg: ConfigContainer, batch_size: int):
     def calculate_layer_counts():
         """Calculate the number of attention, Mamba, and MLP layers."""
@@ -98,13 +100,10 @@ def num_floating_point_operations(cfg: ConfigContainer, batch_size: int):
         """Calculate FLOPs for a standard Transformer model."""
         # TODO(helenn/dnarayanan): Refactor this to reuse the helper methods.
         # Attention projection size.
-        query_projection_size = getattr(cfg.model, 'kv_channels', cfg.model.hidden_size) * cfg.model.num_attention_heads
+        query_projection_size = cfg.model.kv_channels * cfg.model.num_attention_heads
         query_projection_to_hidden_size_ratio = query_projection_size / cfg.model.hidden_size
-        # Group Query Attention.
-        if not getattr(cfg.model, 'group_query_attention', False):
-            num_query_groups = cfg.model.num_attention_heads
-        else:
-            num_query_groups = getattr(cfg.model, 'num_query_groups', cfg.model.num_attention_heads)
+        # GQA or MHA
+        num_query_groups = getattr(cfg.model, 'num_query_groups', cfg.model.num_attention_heads)
         # MoE.
         if not hasattr(cfg.model, 'num_moe_experts') or cfg.model.num_moe_experts is None:
             # Every Transformer MLP is dense.
@@ -142,11 +141,8 @@ def num_floating_point_operations(cfg: ConfigContainer, batch_size: int):
             mtp_num_layers = 0
             num_layers = cfg.model.num_layers
 
-        moe_ffn_hidden_size = (
-            getattr(cfg.model, 'moe_ffn_hidden_size', None)
-            if hasattr(cfg.model, 'moe_ffn_hidden_size') and cfg.model.moe_ffn_hidden_size is not None
-            else getattr(cfg.model, 'ffn_hidden_size', cfg.model.hidden_size * 4)
-        )
+        # 'moe_ffn_hidden_size' is set only for MoE models.
+        moe_ffn_hidden_size = getattr(cfg.model, 'moe_ffn_hidden_size', cfg.model.ffn_hidden_size)
         shared_expert_ffn_hidden_size = (
             0
             if not hasattr(cfg.model, 'moe_shared_expert_intermediate_size') or cfg.model.moe_shared_expert_intermediate_size is None
@@ -165,8 +161,7 @@ def num_floating_point_operations(cfg: ConfigContainer, batch_size: int):
         # - 2x: A GEMM of a m*n tensor with a n*k tensor requires 2mnk floating-point operations.
         expansion_factor = 3 * 2 * 2
 
-        if getattr(cfg.model, 'multi_latent_attention', False):
-            assert not getattr(cfg.model, 'group_query_attention', False)
+        if cfg.model.multi_latent_attention:
             '''
             Basic arithmetic
             let B is batch size, s is seq_len, h is embedding dim,
@@ -246,10 +241,10 @@ def num_floating_point_operations(cfg: ConfigContainer, batch_size: int):
                 * cfg.model.hidden_size
                 * (
                     # dense layer (deepseek v2, v3 style)
-                    (getattr(cfg.model, 'ffn_hidden_size', cfg.model.hidden_size * 4) * gated_linear_multiplier)
+                    (cfg.model.ffn_hidden_size * gated_linear_multiplier)
                     * (num_dense_layers / num_layers)
                     # routed experts
-                    + ((moe_ffn_hidden_size or getattr(cfg.model, 'ffn_hidden_size', cfg.model.hidden_size * 4)) * num_experts_routed_to * gated_linear_multiplier)
+                    + (moe_ffn_hidden_size * num_experts_routed_to * gated_linear_multiplier)
                     * (num_moe_layers / num_layers)
                     # Shared Experts.
                     + (shared_expert_ffn_hidden_size * gated_linear_multiplier)
@@ -268,13 +263,15 @@ def num_floating_point_operations(cfg: ConfigContainer, batch_size: int):
                     + 2 * cfg.model.hidden_size * cfg.model.hidden_size
                 )
                 # Logit.
-                + 3 * 2 * cfg.model.hidden_size * cfg.tokenizer.vocab_size * (mtp_num_layers + 1)
+                + 3 * 2 * cfg.model.hidden_size * cfg.tokenizer.padded_vocab_size * (mtp_num_layers + 1)
             )
         )
         return total_floating_point_operations
 
     # Main entrypoint for FLOPs calculation.
     if getattr(cfg.model, 'is_hybrid_model', False):
+        # TODO: Fix this when onboarding hybrid models
+        """
         # Calculate the number of each type of layer.
         num_attn_layers, num_mamba_layers, num_mlp_layers = calculate_layer_counts()
 
@@ -298,6 +295,8 @@ def num_floating_point_operations(cfg: ConfigContainer, batch_size: int):
             swiglu=getattr(cfg.model, 'gated_linear_unit', False),
             vocab_size=cfg.tokenizer.padded_vocab_size,
         )
+        """
+        return 0
     else:
         # Compute standard Transformer model FLOPs.
         return transformer_flops()
