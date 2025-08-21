@@ -15,22 +15,29 @@
 
 """Tests for flop_utils module."""
 
+import importlib
 import pytest
-from dataclasses import dataclass
-from unittest.mock import MagicMock
-
+import math
 from megatron.bridge.training.utils.flop_utils import num_floating_point_operations
-from megatron.bridge.training.config import ConfigContainer
-from megatron.bridge.models import GPTModelProvider, T5ModelProvider
-from megatron.bridge.training.tokenizers.config import TokenizerConfig
-
+from megatron.bridge.training.tokenizers.tokenizer import _vocab_size_with_padding
 
 class TestFlops:
-    #@pytest.mark.parametrize("model_provider", [GPTModelProvider, T5ModelProvider])
-    def test_llama31_8b_flops(self, model_provider):
-        import megatron.bridge.recipes.llama31_8b as llama31_8b
-        cfg = llama31_8b.get_config()
+    @pytest.mark.parametrize("recipe, expected_flops", [
+        ("llama.llama3_8b", 4.22e14),
+        ("llama.llama31_405b", 2.07e16),
+    ])
+    def test_llama3_8b_flops(self, recipe, expected_flops):
+        module = importlib.import_module(f"megatron.bridge.recipes.{recipe}")
+        cfg = module.pretrain_config()
 
-        num_ops = num_floating_point_operations(cfg, batch_size=1)
-        print(num_ops)
-        assert num_ops == 144*1e12
+        # Calculate padded vocab size to ensure it's divisible by tensor parallel size
+        cfg.tokenizer.padded_vocab_size = _vocab_size_with_padding(
+            cfg.tokenizer.vocab_size,
+            cfg.model.make_vocab_size_divisible_by,
+            cfg.model.tensor_model_parallel_size,
+        )
+
+        num_flops = num_floating_point_operations(cfg)
+        assert (
+            math.floor(num_flops / 1e12) == expected_flops
+        ), f"Expected TFLops: {expected_flops:.2e} but got {num_flops:.2e} with {cfg.tokenizer.padded_vocab_size}"

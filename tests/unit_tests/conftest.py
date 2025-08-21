@@ -19,7 +19,6 @@ from unittest.mock import patch
 
 import pytest
 
-from tests.unit_tests.download_unit_tests_dataset import get_oldest_release_and_assets
 
 
 logging.basicConfig(level=logging.INFO)
@@ -52,6 +51,7 @@ def ensure_test_data(tmp_path_factory):
 
         try:
             # Download assets to data_path
+            from tests.unit_tests.download_unit_tests_dataset import get_oldest_release_and_assets
             get_oldest_release_and_assets(assets_dir=str(data_path))
 
             logger.info("Test data downloaded successfully.")
