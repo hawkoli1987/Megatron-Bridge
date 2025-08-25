@@ -31,5 +31,4 @@ __all__ = [
     "Starcoder2ModelProvider3B",
     "Starcoder2ModelProvider7B",
     "Starcoder2ModelProvider15B",
-    [],
 ]
