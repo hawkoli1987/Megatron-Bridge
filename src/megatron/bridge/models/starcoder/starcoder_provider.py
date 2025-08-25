@@ -45,7 +45,7 @@ class StarcoderModelProvider(GPTModelProvider):
 
 
 @dataclass
-class StarcoderConfig15B(StarcoderModelProvider):
+class StarcoderModelProvider15B(StarcoderModelProvider):
     """
     Model Provider for the Starcoder 15B, inheriting from StarcoderModelProvider.
     """

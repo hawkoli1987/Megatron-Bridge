@@ -15,8 +15,8 @@
 import torch.nn.functional as F
 
 from megatron.bridge.models.starcoder.starcoder_provider import (
-    StarcoderConfig15B,
     StarcoderModelProvider,
+    StarcoderModelProvider15B,
 )
 
 
@@ -54,12 +54,12 @@ class TestStarcoderModelProvider:
         assert provider.bias_dropout_fusion is True
 
 
-class TestStarcoderConfig15B:
-    """Test cases for StarcoderConfig15B class."""
+class TestStarcoderModelProvider15B:
+    """Test cases for StarcoderModelProvider15B class."""
 
-    def test_starcoder_config_15b_defaults(self):
-        """Test StarcoderConfig15B has correct default values for 15B model."""
-        provider = StarcoderConfig15B()
+    def test_starcoder_model_provider_15b_defaults(self):
+        """Test StarcoderModelProvider15B has correct default values for 15B model."""
+        provider = StarcoderModelProvider15B()
 
         # Check 15B-specific configuration
         assert provider.num_layers == 40
@@ -93,11 +93,11 @@ class TestStarcoderProviderInheritance:
         from megatron.bridge.models.gpt_provider import GPTModelProvider
 
         assert issubclass(StarcoderModelProvider, GPTModelProvider)
-        assert issubclass(StarcoderConfig15B, StarcoderModelProvider)
-        assert issubclass(StarcoderConfig15B, GPTModelProvider)
+        assert issubclass(StarcoderModelProvider15B, StarcoderModelProvider)
+        assert issubclass(StarcoderModelProvider15B, GPTModelProvider)
 
     def test_provide_method_inherited(self):
         """Test that provide method works correctly in inherited classes."""
-        provider = StarcoderConfig15B()
+        provider = StarcoderModelProvider15B()
         assert hasattr(provider, "provide")
         assert callable(provider.provide)

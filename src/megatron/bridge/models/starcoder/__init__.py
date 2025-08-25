@@ -11,3 +11,25 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
+from megatron.bridge.models.starcoder.starcoder2_provider import (
+    Starcoder2ModelProvider,
+    Starcoder2ModelProvider3B,
+    Starcoder2ModelProvider7B,
+    Starcoder2ModelProvider15B,
+)
+from megatron.bridge.models.starcoder.starcoder_provider import (
+    StarcoderModelProvider,
+    StarcoderModelProvider15B,
+)
+
+
+__all__ = [
+    "StarcoderModelProvider",
+    "StarcoderModelProvider15B",
+    "Starcoder2ModelProvider",
+    "Starcoder2ModelProvider3B",
+    "Starcoder2ModelProvider7B",
+    "Starcoder2ModelProvider15B",
+    [],
+]
