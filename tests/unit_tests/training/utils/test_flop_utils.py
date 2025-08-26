@@ -24,7 +24,10 @@ from megatron.bridge.training.tokenizers.tokenizer import _vocab_size_with_paddi
 class TestFlops:
     @pytest.mark.parametrize("recipe, expected_flops", [
         ("llama.llama3_8b", 4.22e14),
+        ("llama.llama3_70b", 3.68e15),
         ("llama.llama31_405b", 2.07e16),
+        ("llama.llama4_e16", 8.92e14),
+        ("llama.llama4_e128", 8.92e14),
     ])
     def test_llama3_8b_flops(self, recipe, expected_flops):
         module = importlib.import_module(f"megatron.bridge.recipes.{recipe}")
