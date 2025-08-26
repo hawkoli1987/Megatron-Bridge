@@ -16,6 +16,8 @@ import torch.nn.functional as F
 
 from megatron.bridge.training.config import ConfigContainer
 from megatron.bridge.utils.decorators import experimental_fn
+from megatron.bridge.utils.vocab_utils import calculate_padded_vocab_size
+
 
 
 @experimental_fn
@@ -402,3 +404,19 @@ def num_floating_point_operations(cfg: ConfigContainer, batch_size: int = 1):
     else:
         # Compute standard Transformer model FLOPs.
         return transformer_flops()
+
+def _get_vocab_size(model_cfg) -> int:
+    """Get the potentially padded vocabulary size for the given configuration.
+
+    Args:
+        cfg: The model provider configuration.
+
+    Returns:
+        int: The vocabulary size used.
+    """
+    if model_cfg.should_pad_vocab:
+        return calculate_padded_vocab_size(
+            model_cfg.vocab_size, model_cfg.make_vocab_size_divisible_by, model_cfg.tensor_model_parallel_size
+        )
+    else:
+        return model_cfg.vocab_size

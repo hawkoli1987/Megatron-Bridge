@@ -25,8 +25,10 @@ from megatron.core.optimizer import OptimizerConfig
 
 from megatron.bridge.data.datasets.packed_sequence import PackedSequenceSpecs
 from megatron.bridge.models import GPTModelProvider, T5ModelProvider
+from megatron.bridge.models.mamba.mamba_provider import MambaProvider
 from megatron.bridge.peft.base import PEFT
 from megatron.bridge.training.comm_overlap import CommOverlapConfig
+from megatron.bridge.training.deepep import validate_deepep
 from megatron.bridge.training.mixed_precision import MixedPrecisionConfig
 from megatron.bridge.training.tokenizers.config import TokenizerConfig
 from megatron.bridge.training.utils.config_utils import _ConfigContainerBase as Container
@@ -97,6 +99,12 @@ class DistributedInitConfig:
     """Set the use of SHARP for the collective communications of data-parallel process groups.
     When `True`, run barrier within each data-parallel process group,
     which specifies the SHARP application target groups.
+    """
+
+    sharp_enabled_group: Optional[Literal["dp", "dp_replica"]] = None
+    """IB SHARP can be enabled from only one communication group.
+    By default, it is enabled from dp group if not specified and use_sharp=True.
+    Available options: [dp, dp_replica]
     """
 
     high_priority_stream_groups: Optional[list[str]] = None
@@ -711,7 +719,7 @@ class ConfigContainer(Container):
     rng: RNGConfig = field(default_factory=RNGConfig)
     rerun_state_machine: RerunStateMachineConfig = field(default_factory=RerunStateMachineConfig)
     train: TrainingConfig
-    model: GPTModelProvider | T5ModelProvider
+    model: GPTModelProvider | T5ModelProvider | MambaProvider
     optimizer: OptimizerConfig
     ddp: DistributedDataParallelConfig = field(default_factory=DistributedDataParallelConfig)
     scheduler: SchedulerConfig
@@ -786,6 +794,22 @@ class ConfigContainer(Container):
         else:
             self.scheduler.lr_warmup_steps = self.scheduler.lr_warmup_iters * self.train.global_batch_size
 
+        if self.model.context_parallel_size > 1:
+            assert self.model.seq_length % (self.model.context_parallel_size * 2) == 0, (
+                "Sequence length must be divisible by 2 * context parallel size if context parallel is used."
+            )
+            if isinstance(self.dataset, FinetuningDatasetConfig):
+                # check calculate_per_token_loss to be True
+                # check average_in_collective to be False
+                # for context parallel to solve the issue of nan loss on ranks with all tokens masked
+                # (only happens in SFT)
+                assert self.model.calculate_per_token_loss, (
+                    "When finetuning with CP>1, calculate_per_token_loss must be True"
+                )
+                assert not self.ddp.average_in_collective, (
+                    "When finetuning with CP>1, average_in_collective must be False"
+                )
+
         if (
             isinstance(self.dataset, FinetuningDatasetConfig)
             and self.dataset.packed_sequence_specs is not None
@@ -809,13 +833,18 @@ class ConfigContainer(Container):
         if self.peft is not None:
             assert self.checkpoint.pretrained_checkpoint is not None, "PEFT requires a pretrained checkpoint path"
 
-        data_seq_length = (
-            self.dataset.seq_length
-            if isinstance(self.dataset, FinetuningDatasetConfig)
-            else self.dataset.sequence_length
-        )
-        assert self.model.seq_length == data_seq_length, (
-            f"Please ensure sequence length configuration in model config and "
-            f"dataset config match.\nSequence length in model config: {self.model.seq_length}, "
-            f"Sequence length in dataset config: {data_seq_length}"
-        )
+        if self.dataset is not None:
+            data_seq_length = (
+                self.dataset.seq_length
+                if isinstance(self.dataset, FinetuningDatasetConfig)
+                else self.dataset.sequence_length
+            )
+
+            assert self.model.seq_length == data_seq_length, (
+                f"Please ensure sequence length configuration in model config and "
+                f"dataset config match.\nSequence length in model config: {self.model.seq_length}, "
+                f"Sequence length in dataset config: {data_seq_length}"
+            )
+
+        # Validate DeepEP is supported for the current GPU architecture
+        validate_deepep(self.model)

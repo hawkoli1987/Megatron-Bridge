@@ -18,6 +18,7 @@ from shutil import rmtree
 from unittest.mock import patch
 
 import pytest
+from megatron.core.msc_utils import MultiStorageClientFeature
 
 
 
@@ -69,6 +70,12 @@ def ensure_test_data(tmp_path_factory):
         logger.info(f"Test data already available at {data_path}")
 
     yield data_path
+
+
+@pytest.fixture(scope="function", autouse=True)
+def disable_msc():
+    """Disable MSC for the tests."""
+    MultiStorageClientFeature.disable()
 
 
 @pytest.fixture(autouse=True)

@@ -17,7 +17,7 @@ provider = bridge.to_megatron_provider()
 provider.tensor_model_parallel_size = 8
 provider.pipeline_model_parallel_size = 2
 
-model = provider(wrap_with_ddp=False)
+model = provider.provide_distributed_model(wrap_with_ddp=False)
 ```
 
 ### Converting Megatron Models back to 🤗Hugging Face
@@ -110,7 +110,7 @@ Different weight transformation strategies handle various parallelism patterns:
 1. **Planning Phase**
    - Iterate through Megatron model parameters
    - Query StateBridge for HF source mappings
-   - Build execution plan with resolved names
+   - Build execution task with resolved names
 
 2. **Execution Phase**
    - Load HF weights according to mappings
@@ -127,7 +127,7 @@ Different weight transformation strategies handle various parallelism patterns:
 
 1. **Collection Phase**
    - Gather parameter locations across pipeline ranks
-   - Build export plan respecting ordering preferences
+   - Build export task respecting ordering preferences
 
 2. **Export Phase**
    - Broadcast from owning pipeline rank
@@ -298,7 +298,7 @@ mapping_registry = bridge.mapping_registry()
 print(mapping_registry.get_all_mappings())
 
 # Verify weight shapes
-for task in bridge._build_plan_hf_to_megatron(hf_model, meg_models):
+for task in bridge._build_conversion_tasks(hf_model, meg_models):
     print(f"{task.param_name}: {task.megatron_param.shape}")
 ```
 
