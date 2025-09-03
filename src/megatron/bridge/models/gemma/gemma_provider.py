@@ -53,7 +53,7 @@ class GemmaModelProvider(GPTModelProvider):
     params_dtype: torch.dtype = torch.bfloat16
     autocast_dtype: torch.dtype = torch.bfloat16
 
-    def provide(self, pre_process=None, post_process=None, vp_stage=None, tokenizer=None) -> "MCoreGPTModel":
+    def provide(self, pre_process=None, post_process=None, vp_stage=None) -> "MCoreGPTModel":
         """Configure and instantiate a Megatron Core Gemma model.
 
         Extends the base configuration with Gemma-specific embedding scaling.
@@ -67,9 +67,7 @@ class GemmaModelProvider(GPTModelProvider):
         Returns:
             MCoreGPTModel: Configured Megatron Core GPT model instance
         """
-        model = super().provide(
-            pre_process=pre_process, post_process=post_process, vp_stage=vp_stage, tokenizer=tokenizer
-        )
+        model = super().provide(pre_process=pre_process, post_process=post_process, vp_stage=vp_stage)
 
         # Apply Embedding Scaling for Gemma: sqrt(hidden_size)
         if parallel_state.is_pipeline_first_stage(
