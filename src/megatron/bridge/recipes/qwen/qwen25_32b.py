@@ -18,7 +18,7 @@ from typing import List, Optional, Union
 import torch
 from megatron.core.distributed import DistributedDataParallelConfig
 
-from megatron.bridge.models.qwen import Qwen25ModelProvider32B
+from megatron.bridge.models.qwen import Qwen2p5ModelProvider32B
 from megatron.bridge.recipes.utils.dataset_utils import get_blend_fields_from_data_paths
 from megatron.bridge.recipes.utils.optimizer_utils import distributed_fused_adam_with_cosine_annealing
 from megatron.bridge.recipes.utils.tokenizer_utils import DEFAULT_NULL_TOKENIZER_VOCAB_SIZE
@@ -42,7 +42,7 @@ def model_config(
     virtual_pipeline_parallelism: Optional[int] = None,
     context_parallelism: int = 1,
     sequence_parallelism: bool = False,
-) -> Qwen25ModelProvider32B:
+) -> Qwen2p5ModelProvider32B:
     """
     Configure the Qwen2.5 32B model.
 
@@ -55,9 +55,9 @@ def model_config(
         sequence_parallelism (bool): Whether to use sequence parallelism.
 
     Returns:
-        Qwen25ModelProvider32B: Configuration for the Qwen2.5 32B model.
+        Qwen2p5ModelProvider32B: Configuration for the Qwen2.5 32B model.
     """
-    return Qwen25ModelProvider32B(
+    return Qwen2p5ModelProvider32B(
         tensor_model_parallel_size=tensor_parallelism,
         pipeline_model_parallel_size=pipeline_parallelism,
         pipeline_dtype=pipeline_parallelism_dtype,

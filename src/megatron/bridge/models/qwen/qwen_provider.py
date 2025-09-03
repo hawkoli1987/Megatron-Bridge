@@ -120,7 +120,7 @@ class Qwen2ModelProvider72B(Qwen2ModelProvider):
 
 
 @dataclass
-class Qwen25ModelProvider500M(Qwen2ModelProvider):
+class Qwen2p5ModelProvider500M(Qwen2ModelProvider):
     """
     Config for Qwen 2.5 0.5B: https://huggingface.co/Qwen/Qwen2.5-0.5B
     """
@@ -135,7 +135,7 @@ class Qwen25ModelProvider500M(Qwen2ModelProvider):
 
 
 @dataclass
-class Qwen25ModelProvider1P5B(Qwen2ModelProvider):
+class Qwen2p5ModelProvider1P5B(Qwen2ModelProvider):
     """
     Config for Qwen 2.5 1.5B: https://huggingface.co/Qwen/Qwen2.5-1.5B
     """
@@ -150,7 +150,7 @@ class Qwen25ModelProvider1P5B(Qwen2ModelProvider):
 
 
 @dataclass
-class Qwen25ModelProvider3B(Qwen2ModelProvider):
+class Qwen2p5ModelProvider3B(Qwen2ModelProvider):
     """
     Config for Qwen 2.5 3B: https://huggingface.co/Qwen/Qwen2.5-3B
     """
@@ -166,7 +166,7 @@ class Qwen25ModelProvider3B(Qwen2ModelProvider):
 
 
 @dataclass
-class Qwen25ModelProvider7B(Qwen2ModelProvider):
+class Qwen2p5ModelProvider7B(Qwen2ModelProvider):
     """
     Config for Qwen 2.5 7B: https://huggingface.co/Qwen/Qwen2.5-7B
     """
@@ -181,7 +181,7 @@ class Qwen25ModelProvider7B(Qwen2ModelProvider):
 
 
 @dataclass
-class Qwen25ModelProvider14B(Qwen2ModelProvider):
+class Qwen2p5ModelProvider14B(Qwen2ModelProvider):
     """
     Config for Qwen 2.5 14B: https://huggingface.co/Qwen/Qwen2.5-14B
     """
@@ -197,7 +197,7 @@ class Qwen25ModelProvider14B(Qwen2ModelProvider):
 
 
 @dataclass
-class Qwen25ModelProvider32B(Qwen2ModelProvider):
+class Qwen2p5ModelProvider32B(Qwen2ModelProvider):
     """
     Config for Qwen 2.5 32B: https://huggingface.co/Qwen/Qwen2.5-32B
     """
@@ -213,7 +213,7 @@ class Qwen25ModelProvider32B(Qwen2ModelProvider):
 
 
 @dataclass
-class Qwen25ModelProvider72B(Qwen2ModelProvider):
+class Qwen2p5ModelProvider72B(Qwen2ModelProvider):
     """
     Config for Qwen 2.5 72B: https://huggingface.co/Qwen/Qwen2.5-72B
     """

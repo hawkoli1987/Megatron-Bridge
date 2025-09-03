@@ -20,13 +20,13 @@ from megatron.bridge.models.qwen import (
     Qwen2ModelProvider7B,
     Qwen2ModelProvider72B,
     Qwen2ModelProvider500M,
-    Qwen25ModelProvider1P5B,
-    Qwen25ModelProvider3B,
-    Qwen25ModelProvider7B,
-    Qwen25ModelProvider14B,
-    Qwen25ModelProvider32B,
-    Qwen25ModelProvider72B,
-    Qwen25ModelProvider500M,
+    Qwen2p5ModelProvider1P5B,
+    Qwen2p5ModelProvider3B,
+    Qwen2p5ModelProvider7B,
+    Qwen2p5ModelProvider14B,
+    Qwen2p5ModelProvider32B,
+    Qwen2p5ModelProvider72B,
+    Qwen2p5ModelProvider500M,
 )
 
 
@@ -157,12 +157,12 @@ class TestQwen2ModelProvider500M:
         assert provider.hidden_size == 896
 
 
-class TestQwen25ModelProvider500M:
-    """Test cases for Qwen25ModelProvider500M class."""
+class TestQwen2p5ModelProvider500M:
+    """Test cases for Qwen2p5ModelProvider500M class."""
 
     def test_qwen25_500m_default_configuration(self):
         """Test Qwen2.5 500M model has correct default configuration."""
-        provider = Qwen25ModelProvider500M()
+        provider = Qwen2p5ModelProvider500M()
 
         # Check Qwen2.5 500M specific configuration
         assert provider.num_layers == 24
@@ -179,7 +179,7 @@ class TestQwen25ModelProvider500M:
 
     def test_qwen25_500m_extended_context(self):
         """Test Qwen2.5 500M has extended context length."""
-        provider = Qwen25ModelProvider500M()
+        provider = Qwen2p5ModelProvider500M()
 
         # Qwen2.5 500M supports 32k context window
         assert provider.seq_length == 32768
@@ -204,12 +204,12 @@ class TestQwen2ModelProvider1P5B:
         assert provider.vocab_size == 151936
 
 
-class TestQwen25ModelProvider1P5B:
-    """Test cases for Qwen25ModelProvider1P5B class."""
+class TestQwen2p5ModelProvider1P5B:
+    """Test cases for Qwen2p5ModelProvider1P5B class."""
 
     def test_qwen25_1p5b_default_configuration(self):
         """Test Qwen2.5 1.5B model has correct default configuration."""
-        provider = Qwen25ModelProvider1P5B()
+        provider = Qwen2p5ModelProvider1P5B()
 
         # Check Qwen2.5 1.5B specific configuration
         assert provider.num_layers == 28
@@ -223,12 +223,12 @@ class TestQwen25ModelProvider1P5B:
         assert provider.vocab_size == 151936
 
 
-class TestQwen25ModelProvider3B:
-    """Test cases for Qwen25ModelProvider3B class."""
+class TestQwen2p5ModelProvider3B:
+    """Test cases for Qwen2p5ModelProvider3B class."""
 
     def test_qwen25_3b_default_configuration(self):
         """Test Qwen2.5 3B model has correct default configuration."""
-        provider = Qwen25ModelProvider3B()
+        provider = Qwen2p5ModelProvider3B()
 
         # Check Qwen2.5 3B specific configuration
         assert provider.num_layers == 36
@@ -264,12 +264,12 @@ class TestQwen2ModelProvider7B:
         assert provider.normalization == "RMSNorm"
 
 
-class TestQwen25ModelProvider7B:
-    """Test cases for Qwen25ModelProvider7B class."""
+class TestQwen2p5ModelProvider7B:
+    """Test cases for Qwen2p5ModelProvider7B class."""
 
     def test_qwen25_7b_default_configuration(self):
         """Test Qwen2.5 7B model has correct default configuration."""
-        provider = Qwen25ModelProvider7B()
+        provider = Qwen2p5ModelProvider7B()
 
         # Check Qwen2.5 7B specific configuration
         assert provider.num_layers == 28
@@ -284,12 +284,12 @@ class TestQwen25ModelProvider7B:
         assert provider.normalization == "RMSNorm"
 
 
-class TestQwen25ModelProvider14B:
-    """Test cases for Qwen25ModelProvider14B class."""
+class TestQwen2p5ModelProvider14B:
+    """Test cases for Qwen2p5ModelProvider14B class."""
 
     def test_qwen25_14b_default_configuration(self):
         """Test Qwen2.5 14B model has correct default configuration."""
-        provider = Qwen25ModelProvider14B()
+        provider = Qwen2p5ModelProvider14B()
 
         # Check Qwen2.5 14B specific configuration
         assert provider.num_layers == 48
@@ -306,12 +306,12 @@ class TestQwen25ModelProvider14B:
         assert provider.activation_func is F.silu
 
 
-class TestQwen25ModelProvider32B:
-    """Test cases for Qwen25ModelProvider32B class."""
+class TestQwen2p5ModelProvider32B:
+    """Test cases for Qwen2p5ModelProvider32B class."""
 
     def test_qwen25_32b_default_configuration(self):
         """Test Qwen2.5 32B model has correct default configuration."""
-        provider = Qwen25ModelProvider32B()
+        provider = Qwen2p5ModelProvider32B()
 
         # Check Qwen2.5 32B specific configuration
         assert provider.num_layers == 64
@@ -349,12 +349,12 @@ class TestQwen2ModelProvider72B:
         assert provider.normalization == "RMSNorm"
 
 
-class TestQwen25ModelProvider72B:
-    """Test cases for Qwen25ModelProvider72B class."""
+class TestQwen2p5ModelProvider72B:
+    """Test cases for Qwen2p5ModelProvider72B class."""
 
     def test_qwen25_72b_default_configuration(self):
         """Test Qwen2.5 72B model has correct default configuration."""
-        provider = Qwen25ModelProvider72B()
+        provider = Qwen2p5ModelProvider72B()
 
         # Check Qwen2.5 72B specific configuration
         assert provider.num_layers == 80
@@ -370,13 +370,13 @@ class TestQwen25ModelProvider72B:
         assert provider.normalization == "RMSNorm"
 
 
-class TestQwen2VsQwen25Differences:
+class TestQwen2VsQwen2p5Differences:
     """Test cases to verify differences between Qwen2 and Qwen2.5 models."""
 
     def test_qwen2_vs_qwen25_500m_context_length(self):
         """Test that Qwen2.5 500M has extended context compared to Qwen2."""
         qwen2_provider = Qwen2ModelProvider500M()
-        qwen25_provider = Qwen25ModelProvider500M()
+        qwen25_provider = Qwen2p5ModelProvider500M()
 
         assert qwen2_provider.seq_length == 32768
         assert qwen25_provider.seq_length == 32768
@@ -384,7 +384,7 @@ class TestQwen2VsQwen25Differences:
     def test_qwen2_vs_qwen25_1p5b_context_length(self):
         """Test that Qwen2.5 1.5B has extended context compared to Qwen2."""
         qwen2_provider = Qwen2ModelProvider1P5B()
-        qwen25_provider = Qwen25ModelProvider1P5B()
+        qwen25_provider = Qwen2p5ModelProvider1P5B()
 
         assert qwen2_provider.seq_length == 32768
         assert qwen25_provider.seq_length == 32768
@@ -392,7 +392,7 @@ class TestQwen2VsQwen25Differences:
     def test_qwen2_vs_qwen25_7b_context_length(self):
         """Test that Qwen2.5 7B has extended context compared to Qwen2."""
         qwen2_provider = Qwen2ModelProvider7B()
-        qwen25_provider = Qwen25ModelProvider7B()
+        qwen25_provider = Qwen2p5ModelProvider7B()
 
         assert qwen2_provider.seq_length == 32768
         assert qwen25_provider.seq_length == 32768
@@ -400,14 +400,14 @@ class TestQwen2VsQwen25Differences:
     def test_qwen2_vs_qwen25_72b_context_length(self):
         """Test that Qwen2.5 72B has extended context compared to Qwen2."""
         qwen2_provider = Qwen2ModelProvider72B()
-        qwen25_provider = Qwen25ModelProvider72B()
+        qwen25_provider = Qwen2p5ModelProvider72B()
 
         assert qwen2_provider.seq_length == 32768
         assert qwen25_provider.seq_length == 32768
 
     def test_qwen25_3b_unique_features(self):
         """Test that Qwen2.5 3B has unique features not in Qwen2."""
-        provider = Qwen25ModelProvider3B()
+        provider = Qwen2p5ModelProvider3B()
 
         # Qwen2.5 3B has tied embeddings
         assert provider.share_embeddings_and_output_weights is True
@@ -433,21 +433,21 @@ class TestQwen2ProviderInheritance:
 
     def test_qwen25_models_inherit_from_base(self):
         """Test Qwen2.5 providers inherit from base Qwen2ModelProvider."""
-        assert issubclass(Qwen25ModelProvider500M, Qwen2ModelProvider)
-        assert issubclass(Qwen25ModelProvider1P5B, Qwen2ModelProvider)
-        assert issubclass(Qwen25ModelProvider7B, Qwen2ModelProvider)
-        assert issubclass(Qwen25ModelProvider72B, Qwen2ModelProvider)
+        assert issubclass(Qwen2p5ModelProvider500M, Qwen2ModelProvider)
+        assert issubclass(Qwen2p5ModelProvider1P5B, Qwen2ModelProvider)
+        assert issubclass(Qwen2p5ModelProvider7B, Qwen2ModelProvider)
+        assert issubclass(Qwen2p5ModelProvider72B, Qwen2ModelProvider)
 
     def test_qwen25_unique_models_inherit_from_base(self):
         """Test Qwen2.5 unique models inherit from base Qwen2ModelProvider."""
-        assert issubclass(Qwen25ModelProvider3B, Qwen2ModelProvider)
-        assert issubclass(Qwen25ModelProvider14B, Qwen2ModelProvider)
-        assert issubclass(Qwen25ModelProvider32B, Qwen2ModelProvider)
+        assert issubclass(Qwen2p5ModelProvider3B, Qwen2ModelProvider)
+        assert issubclass(Qwen2p5ModelProvider14B, Qwen2ModelProvider)
+        assert issubclass(Qwen2p5ModelProvider32B, Qwen2ModelProvider)
 
     def test_provide_method_inherited(self):
         """Test that provide method works correctly in inherited classes."""
         # Test with Qwen2.5 7B
-        provider = Qwen25ModelProvider7B()
+        provider = Qwen2p5ModelProvider7B()
 
         # The provide method should be inherited from GPTModelProvider
         assert hasattr(provider, "provide")
@@ -530,7 +530,7 @@ class TestQwen2ProviderQueryGroupsConsistency:
 
     def test_qwen25_3b_num_query_groups(self):
         """Test that Qwen2.5 3B has correct num_query_groups."""
-        provider = Qwen25ModelProvider3B()
+        provider = Qwen2p5ModelProvider3B()
         assert provider.num_query_groups == 2
 
     def test_qwen2_7b_num_query_groups(self):
@@ -540,12 +540,12 @@ class TestQwen2ProviderQueryGroupsConsistency:
 
     def test_qwen25_14b_num_query_groups(self):
         """Test that Qwen2.5 14B has correct num_query_groups."""
-        provider = Qwen25ModelProvider14B()
+        provider = Qwen2p5ModelProvider14B()
         assert provider.num_query_groups == 8
 
     def test_qwen25_32b_num_query_groups(self):
         """Test that Qwen2.5 32B has correct num_query_groups."""
-        provider = Qwen25ModelProvider32B()
+        provider = Qwen2p5ModelProvider32B()
         assert provider.num_query_groups == 8
 
     def test_qwen2_72b_num_query_groups(self):
@@ -562,9 +562,9 @@ class TestQwen2ProviderVocabularyConsistency:
         providers = [
             Qwen2ModelProvider500M(),
             Qwen2ModelProvider1P5B(),
-            Qwen25ModelProvider500M(),
-            Qwen25ModelProvider1P5B(),
-            Qwen25ModelProvider3B(),
+            Qwen2p5ModelProvider500M(),
+            Qwen2p5ModelProvider1P5B(),
+            Qwen2p5ModelProvider3B(),
         ]
 
         for provider in providers:
@@ -575,10 +575,10 @@ class TestQwen2ProviderVocabularyConsistency:
         providers = [
             Qwen2ModelProvider7B(),
             Qwen2ModelProvider72B(),
-            Qwen25ModelProvider7B(),
-            Qwen25ModelProvider14B(),
-            Qwen25ModelProvider32B(),
-            Qwen25ModelProvider72B(),
+            Qwen2p5ModelProvider7B(),
+            Qwen2p5ModelProvider14B(),
+            Qwen2p5ModelProvider32B(),
+            Qwen2p5ModelProvider72B(),
         ]
 
         for provider in providers:

@@ -20,26 +20,26 @@ from megatron.bridge.models.qwen import (
     Qwen2ModelProvider7B,
     Qwen2ModelProvider72B,
     Qwen2ModelProvider500M,
-    Qwen25ModelProvider1P5B,
-    Qwen25ModelProvider3B,
-    Qwen25ModelProvider7B,
-    Qwen25ModelProvider14B,
-    Qwen25ModelProvider32B,
-    Qwen25ModelProvider72B,
-    Qwen25ModelProvider500M,
+    Qwen2p5ModelProvider1P5B,
+    Qwen2p5ModelProvider3B,
+    Qwen2p5ModelProvider7B,
+    Qwen2p5ModelProvider14B,
+    Qwen2p5ModelProvider32B,
+    Qwen2p5ModelProvider72B,
+    Qwen2p5ModelProvider500M,
 )
 from tests.functional_tests.utils import compare_provider_configs
 
 
 HF_MODEL_ID_TO_BRIDGE_MODEL_PROVIDER = {
     # Qwen2.5 models
-    "Qwen/Qwen2.5-0.5B-Instruct": Qwen25ModelProvider500M,
-    "Qwen/Qwen2.5-1.5B-Instruct": Qwen25ModelProvider1P5B,
-    "Qwen/Qwen2.5-3B-Instruct": Qwen25ModelProvider3B,
-    "Qwen/Qwen2.5-7B-Instruct": Qwen25ModelProvider7B,
-    "Qwen/Qwen2.5-14B-Instruct": Qwen25ModelProvider14B,
-    "Qwen/Qwen2.5-32B-Instruct": Qwen25ModelProvider32B,
-    "Qwen/Qwen2.5-72B-Instruct": Qwen25ModelProvider72B,
+    "Qwen/Qwen2.5-0.5B-Instruct": Qwen2p5ModelProvider500M,
+    "Qwen/Qwen2.5-1.5B-Instruct": Qwen2p5ModelProvider1P5B,
+    "Qwen/Qwen2.5-3B-Instruct": Qwen2p5ModelProvider3B,
+    "Qwen/Qwen2.5-7B-Instruct": Qwen2p5ModelProvider7B,
+    "Qwen/Qwen2.5-14B-Instruct": Qwen2p5ModelProvider14B,
+    "Qwen/Qwen2.5-32B-Instruct": Qwen2p5ModelProvider32B,
+    "Qwen/Qwen2.5-72B-Instruct": Qwen2p5ModelProvider72B,
     # # Qwen2 models
     "Qwen/Qwen2-0.5B-Instruct": Qwen2ModelProvider500M,
     "Qwen/Qwen2-1.5B-Instruct": Qwen2ModelProvider1P5B,
