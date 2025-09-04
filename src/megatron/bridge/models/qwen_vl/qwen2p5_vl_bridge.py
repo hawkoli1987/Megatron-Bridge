@@ -25,7 +25,7 @@ from megatron.bridge.models.conversion.param_mapping import (
 )
 from megatron.bridge.models.hf_pretrained.vlm import PreTrainedVLM
 from megatron.bridge.models.qwen_vl.modeling_qwen2p5_vl import Qwen2p5_VLModel
-from megatron.bridge.models.qwen_vl.qwen_vl_provider import Qwen2p5VLModelProvider3B
+from megatron.bridge.models.qwen_vl.qwen_vl_provider import Qwen2p5VLModelProvider
 
 
 @MegatronModelBridge.register_bridge(source=Qwen2_5_VLForConditionalGeneration, target=Qwen2p5_VLModel)
@@ -43,10 +43,10 @@ class Qwen2p5VLBridge(MegatronModelBridge):
         >>> provider = bridge.to_megatron_provider()
     """
 
-    def provider_bridge(self, hf_pretrained: PreTrainedVLM) -> Qwen2p5VLModelProvider3B:
+    def provider_bridge(self, hf_pretrained: PreTrainedVLM) -> Qwen2p5VLModelProvider:
         hf_config = hf_pretrained.config
 
-        provider = Qwen2p5VLModelProvider3B(
+        provider = Qwen2p5VLModelProvider(
             num_layers=hf_config.num_hidden_layers,
             hidden_size=hf_config.hidden_size,
             ffn_hidden_size=hf_config.intermediate_size,
