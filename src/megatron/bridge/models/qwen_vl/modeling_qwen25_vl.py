@@ -37,7 +37,7 @@ except ImportError:
     HAVE_TE = False
 
 
-class Qwen2p5_VLModel(MegatronModule):
+class Qwen25VLModel(MegatronModule):
     """
     Qwen2.5 VL Model. (Based on GPT Transformer language model.)
 
