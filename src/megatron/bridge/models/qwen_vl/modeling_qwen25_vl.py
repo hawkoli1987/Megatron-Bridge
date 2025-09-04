@@ -167,6 +167,9 @@ class Qwen25VLModel(MegatronModule):
                 1, 0
             )  # [b, decoder_seq_len, h_language] -> [decoder_seq_len, b, h_language]
 
+            if self.config.sequence_parallel:
+                inputs_embeds = scatter_to_sequence_parallel_region(inputs_embeds)
+
         position_ids, rope_deltas = self.get_rope_index(
             input_ids,
             image_grid_thw,
@@ -175,8 +178,6 @@ class Qwen25VLModel(MegatronModule):
             attention_mask=attention_mask,
         )
 
-        if self.config.sequence_parallel:
-            inputs_embeds = scatter_to_sequence_parallel_region(inputs_embeds)
         outputs = self.language_model.forward(
             input_ids=None,
             position_ids=position_ids,
