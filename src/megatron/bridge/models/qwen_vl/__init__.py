@@ -12,56 +12,19 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from megatron.bridge.models.qwen.qwen2_bridge import Qwen2Bridge  # noqa: F401
-from megatron.bridge.models.qwen.qwen3_bridge import Qwen3Bridge  # noqa: F401
-from megatron.bridge.models.qwen.qwen3_moe_bridge import Qwen3MoEBridge  # noqa: F401
-from megatron.bridge.models.qwen.qwen_provider import (
-    Qwen2ModelProvider,
-    Qwen2ModelProvider1P5B,
-    Qwen2ModelProvider7B,
-    Qwen2ModelProvider72B,
-    Qwen2ModelProvider500M,
-    Qwen3ModelProvider,
-    Qwen3ModelProvider1P7B,
-    Qwen3ModelProvider4B,
-    Qwen3ModelProvider8B,
-    Qwen3ModelProvider14B,
-    Qwen3ModelProvider32B,
-    Qwen3ModelProvider600M,
-    Qwen3MoEModelProvider,
-    Qwen3MoEModelProvider30B_A3B,
-    Qwen3MoEModelProvider235B_A22B,
-    Qwen2p5ModelProvider1P5B,
-    Qwen2p5ModelProvider3B,
-    Qwen2p5ModelProvider7B,
-    Qwen2p5ModelProvider14B,
-    Qwen2p5ModelProvider32B,
-    Qwen2p5ModelProvider72B,
-    Qwen2p5ModelProvider500M,
+from megatron.bridge.models.qwen_vl.modeling_qwen2p5_vl import Qwen2p5_VLModel  # noqa: F401
+from megatron.bridge.models.qwen_vl.qwen2p5_vl_bridge import Qwen2p5VLBridge  # noqa: F401
+from megatron.bridge.models.qwen_vl.qwen_vl_provider import (
+    Qwen2p5VLModelProvider,
+    Qwen2p5VLModelProvider3B,
+    Qwen2p5VLModelProvider7B,
 )
 
 
 __all__ = [
-    "Qwen2ModelProvider",
-    "Qwen2ModelProvider500M",
-    "Qwen2ModelProvider1P5B",
-    "Qwen2ModelProvider7B",
-    "Qwen2ModelProvider72B",
-    "Qwen2p5ModelProvider500M",
-    "Qwen2p5ModelProvider1P5B",
-    "Qwen2p5ModelProvider3B",
-    "Qwen2p5ModelProvider7B",
-    "Qwen2p5ModelProvider14B",
-    "Qwen2p5ModelProvider32B",
-    "Qwen2p5ModelProvider72B",
-    "Qwen3ModelProvider",
-    "Qwen3ModelProvider600M",
-    "Qwen3ModelProvider1P7B",
-    "Qwen3ModelProvider4B",
-    "Qwen3ModelProvider8B",
-    "Qwen3ModelProvider14B",
-    "Qwen3ModelProvider32B",
-    "Qwen3MoEModelProvider",
-    "Qwen3MoEModelProvider30B_A3B",
-    "Qwen3MoEModelProvider235B_A22B",
+    "Qwen2p5_VLModel",
+    "Qwen2p5VLBridge",
+    "Qwen2p5VLModelProvider",
+    "Qwen2p5VLModelProvider3B",
+    "Qwen2p5VLModelProvider7B",
 ]

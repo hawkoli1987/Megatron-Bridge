@@ -804,7 +804,7 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
                 mapping = mapping_registry.megatron_to_hf_lookup(global_name)
 
                 if not mapping:
-                    logger.warning(f"WARNING: No megatron to hf mapping found for {global_name}")
+                    logger.warning(f"WARNING: No mapping found for megatron_param: {global_name}")
                     continue
 
                 # ensure hf weights exist

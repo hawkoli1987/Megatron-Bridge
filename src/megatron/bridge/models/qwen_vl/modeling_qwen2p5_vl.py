@@ -12,32 +12,21 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from contextlib import nullcontext
-from typing import Optional, Union, Literal
+import types
+from typing import Optional
 
 import torch
-import torch.nn.functional as F
-from megatron.core import parallel_state, tensor_parallel
-from megatron.core.config_logger import has_config_logger_enabled, log_config_to_disk
-from megatron.core.enums import Fp8Recipe
-from megatron.core.fp8_utils import get_fp8_context
 from megatron.core.inference.contexts import BaseInferenceContext
-from megatron.core.jit import jit_fuser
-from megatron.core.models.common.vision_module.vision_module import VisionModule
 from megatron.core.packed_seq_params import PackedSeqParams
-from megatron.core.process_groups_config import ProcessGroupsCollection
-from megatron.core.transformer.enums import ModelType
-from megatron.core.transformer.spec_utils import ModuleSpec
-from megatron.core.transformer.transformer_block import TransformerBlock, TransformerBlockSubmodules
-from megatron.core.transformer.transformer_config import TransformerConfig
-from megatron.core.utils import WrappedTensor, deprecate_inference_params, make_viewless_tensor
-from megatron.core.models.gpt import GPTModel as MCoreGPTModel
 from megatron.core.transformer.module import MegatronModule
-from megatron.bridge.models.gpt_provider import GPTModelProvider
 from torch import Tensor
+from transformers.models.qwen2_5_vl.modeling_qwen2_5_vl import (
+    Qwen2_5_VisionTransformerPretrainedModel,
+    Qwen2_5_VLModel,
+)
 
-from transformers import Qwen2_5_VLModel, Qwen2_5_VisionTransformerPretrainedModel
-import types
+from megatron.bridge.models.gpt_provider import GPTModelProvider
+
 
 try:
     from megatron.core.extensions.transformer_engine import te_checkpoint
@@ -48,7 +37,6 @@ except ImportError:
 
 
 class Qwen2p5_VLModel(MegatronModule):
-
     """
     Qwen2.5 VL Model. (Based on GPT Transformer language model.)
 
@@ -101,18 +89,22 @@ class Qwen2p5_VLModel(MegatronModule):
     ) -> None:
         super().__init__(config=config)
 
+        self.pre_process = pre_process
+        self.post_process = post_process
+        self.vp_stage = vp_stage
+
         if pre_process:
             self.visual = Qwen2_5_VisionTransformerPretrainedModel._from_config(config.vision_config)
-        self.language_model = self.config.provide(
+        self.language_model = self.config.provide_language_model(
             pre_process=pre_process, post_process=post_process, vp_stage=vp_stage
         )
         self.rope_deltas = None  # cache rope_deltas here
-        
+
         # Bind methods from HF's Qwen2_5_VLModel to this instance
         self.get_placeholder_mask = types.MethodType(Qwen2_5_VLModel.get_placeholder_mask, self)
         self.get_image_features = types.MethodType(Qwen2_5_VLModel.get_image_features, self)
         self.get_video_features = types.MethodType(Qwen2_5_VLModel.get_video_features, self)
-        self.get_placeholder_mask = types.MethodType(Qwen2_5_VLModel.get_placeholder_mask, self)
+        self.get_rope_index = types.MethodType(Qwen2_5_VLModel.get_rope_index, self)
 
     def set_input_tensor(self, input_tensor) -> None:
         """Set model chunk input tensor."""
@@ -172,16 +164,16 @@ class Qwen2p5_VLModel(MegatronModule):
                 )
                 inputs_embeds = inputs_embeds.masked_scatter(video_mask, video_embeds)
 
-        if position_ids is None:
-            position_ids, rope_deltas = self.get_rope_index(
-                input_ids,
-                image_grid_thw,
-                video_grid_thw,
-                second_per_grid_ts=second_per_grid_ts,
-                attention_mask=attention_mask,
-            )
-            self.rope_deltas = rope_deltas
+        position_ids, rope_deltas = self.get_rope_index(
+            input_ids,
+            image_grid_thw,
+            video_grid_thw,
+            second_per_grid_ts=second_per_grid_ts,
+            attention_mask=attention_mask,
+        )
+        self.rope_deltas = rope_deltas
 
+        inputs_embeds.transpose(1, 0)  # [b, decoder_seq_len, h_language] -> [decoder_seq_len, b, h_language]
         outputs = self.language_model.forward(
             input_ids=None,
             position_ids=position_ids,
@@ -192,5 +184,3 @@ class Qwen2p5_VLModel(MegatronModule):
             runtime_gather_output=runtime_gather_output,
         )
         return outputs
-
-
