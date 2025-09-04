@@ -18,8 +18,8 @@ from typing import Optional
 import torch
 from megatron.core.inference.contexts import BaseInferenceContext
 from megatron.core.packed_seq_params import PackedSeqParams
-from megatron.core.transformer.module import MegatronModule
 from megatron.core.tensor_parallel import scatter_to_sequence_parallel_region
+from megatron.core.transformer.module import MegatronModule
 from torch import Tensor
 from transformers.models.qwen2_5_vl.modeling_qwen2_5_vl import (
     Qwen2_5_VisionTransformerPretrainedModel,
@@ -163,6 +163,10 @@ class Qwen2p5_VLModel(MegatronModule):
                 )
                 inputs_embeds = inputs_embeds.masked_scatter(video_mask, video_embeds)
 
+            inputs_embeds = inputs_embeds.transpose(
+                1, 0
+            )  # [b, decoder_seq_len, h_language] -> [decoder_seq_len, b, h_language]
+
         position_ids, rope_deltas = self.get_rope_index(
             input_ids,
             image_grid_thw,
@@ -171,7 +175,6 @@ class Qwen2p5_VLModel(MegatronModule):
             attention_mask=attention_mask,
         )
 
-        inputs_embeds = inputs_embeds.transpose(1, 0)  # [b, decoder_seq_len, h_language] -> [decoder_seq_len, b, h_language]
         if self.config.sequence_parallel:
             inputs_embeds = scatter_to_sequence_parallel_region(inputs_embeds)
         outputs = self.language_model.forward(

@@ -741,6 +741,9 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
             megatron_model: Megatron model instance or list of model instances.
         """
         unwrapped_model = unwrap_model(megatron_model)[0]
+        # hack for vlm to work properly
+        if hasattr(unwrapped_model, "language_model"):
+            unwrapped_model = unwrapped_model.language_model
         model_config = unwrapped_model.config
         if model_config.share_embeddings_and_output_weights and model_config.pipeline_model_parallel_size > 1:
             # Broadcast embeddings and output weights from rank 0 to embedding group
