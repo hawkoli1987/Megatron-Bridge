@@ -13,7 +13,6 @@
 # limitations under the License.
 
 import torch
-from megatron.core.models.gpt.gpt_model import GPTModel
 from transformers import Qwen2_5_VLForConditionalGeneration
 
 from megatron.bridge.models.conversion.mapping_registry import MegatronMappingRegistry
@@ -25,10 +24,11 @@ from megatron.bridge.models.conversion.param_mapping import (
     ReplicatedMapping,
 )
 from megatron.bridge.models.hf_pretrained.vlm import PreTrainedVLM
+from megatron.bridge.models.qwen_vl.modeling_qwen2p5_vl import Qwen2p5_VLModel
 from megatron.bridge.models.qwen_vl.qwen_vl_provider import Qwen2p5VLModelProvider3B
 
 
-@MegatronModelBridge.register_bridge(source=Qwen2_5_VLForConditionalGeneration, target=GPTModel)
+@MegatronModelBridge.register_bridge(source=Qwen2_5_VLForConditionalGeneration, target=Qwen2p5_VLModel)
 class Qwen2p5VLBridge(MegatronModelBridge):
     """
     Megatron Bridge for Qwen2.5-VL Conditional Generation.
@@ -85,46 +85,46 @@ class Qwen2p5VLBridge(MegatronModelBridge):
         # Dictionary maps Megatron parameter names -> HF parameter names
         # Supports wildcard (*) patterns for layer-specific parameters
         param_mappings = {
-            "language_model.embedding.word_embeddings.weight": "model.language_model.embed_tokens.weight",
+            "language_model.embedding.word_embeddings.weight": "model.embed_tokens.weight",
             "language_model.output_layer.weight": "lm_head.weight",
-            "language_model.decoder.final_layernorm.weight": "model.language_model.norm.weight",
-            "language_model.decoder.layers.*.self_attention.linear_qkv.layer_norm_weight": "model.language_model.layers.*.input_layernorm.weight",
-            "language_model.decoder.layers.*.mlp.linear_fc1.layer_norm_weight": "model.language_model.layers.*.post_attention_layernorm.weight",
-            "language_model.decoder.layers.*.self_attention.linear_proj.weight": "model.language_model.layers.*.self_attn.o_proj.weight",
-            "language_model.decoder.layers.*.mlp.linear_fc2.weight": "model.language_model.layers.*.mlp.down_proj.weight",
+            "language_model.decoder.final_layernorm.weight": "model.norm.weight",
+            "language_model.decoder.layers.*.self_attention.linear_qkv.layer_norm_weight": "model.layers.*.input_layernorm.weight",
+            "language_model.decoder.layers.*.mlp.linear_fc1.layer_norm_weight": "model.layers.*.post_attention_layernorm.weight",
+            "language_model.decoder.layers.*.self_attention.linear_proj.weight": "model.layers.*.self_attn.o_proj.weight",
+            "language_model.decoder.layers.*.mlp.linear_fc2.weight": "model.layers.*.mlp.down_proj.weight",
         }
 
         mapping_list = []
         # Convert each dictionary entry to AutoMapping(hf_param, megatron_param)
-        for hf_param, megatron_param in param_mappings.items():
-            mapping_list.append(AutoMapping(hf_param=hf_param, megatron_param=megatron_param))
+        for megatron_param, hf_param in param_mappings.items():
+            mapping_list.append(AutoMapping(megatron_param=megatron_param, hf_param=hf_param))
 
         # Add special mappings that require parameter concatenation/transformation
         mapping_list.extend(
             [
                 ReplicatedMapping(
                     megatron_param="visual.**",
-                    hf_param="model.visual.**",
+                    hf_param="visual.**",
                 ),
                 # QKV: Combine separate Q, K, V matrices into single QKV matrix
                 QKVMapping(
                     megatron_param="language_model.decoder.layers.*.self_attention.linear_qkv.weight",
-                    q="model.language_model.layers.*.self_attn.q_proj.weight",
-                    k="model.language_model.layers.*.self_attn.k_proj.weight",
-                    v="model.language_model.layers.*.self_attn.v_proj.weight",
+                    q="model.layers.*.self_attn.q_proj.weight",
+                    k="model.layers.*.self_attn.k_proj.weight",
+                    v="model.layers.*.self_attn.v_proj.weight",
                 ),
                 # QKV bias: Combine separate Q, K, V biases into single QKV bias (Qwen2 specific)
                 QKVMapping(
                     megatron_param="language_model.decoder.layers.*.self_attention.linear_qkv.bias",
-                    q="model.language_model.layers.*.self_attn.q_proj.bias",
-                    k="model.language_model.layers.*.self_attn.k_proj.bias",
-                    v="model.language_model.layers.*.self_attn.v_proj.bias",
+                    q="model.layers.*.self_attn.q_proj.bias",
+                    k="model.layers.*.self_attn.k_proj.bias",
+                    v="model.layers.*.self_attn.v_proj.bias",
                 ),
                 # Gated MLP: Combine gate and up projection matrices into single FC1 matrix
                 GatedMLPMapping(
                     megatron_param="language_model.decoder.layers.*.mlp.linear_fc1.weight",
-                    gate="model.language_model.layers.*.mlp.gate_proj.weight",
-                    up="model.language_model.layers.*.mlp.up_proj.weight",
+                    gate="model.layers.*.mlp.gate_proj.weight",
+                    up="model.layers.*.mlp.up_proj.weight",
                 ),
             ]
         )

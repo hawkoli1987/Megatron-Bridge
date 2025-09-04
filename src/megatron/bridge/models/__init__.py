@@ -60,6 +60,13 @@ from megatron.bridge.models.qwen import (
     Qwen2ModelProvider7B,
     Qwen2ModelProvider72B,
     Qwen2ModelProvider500M,
+    Qwen2p5ModelProvider1P5B,
+    Qwen2p5ModelProvider3B,
+    Qwen2p5ModelProvider7B,
+    Qwen2p5ModelProvider14B,
+    Qwen2p5ModelProvider32B,
+    Qwen2p5ModelProvider72B,
+    Qwen2p5ModelProvider500M,
     Qwen3ModelProvider,
     Qwen3ModelProvider1P7B,
     Qwen3ModelProvider4B,
@@ -70,6 +77,7 @@ from megatron.bridge.models.qwen import (
     Qwen3MoEModelProvider,
     Qwen3MoEModelProvider30B_A3B,
     Qwen3MoEModelProvider235B_A22B,
+<<<<<<< HEAD
     Qwen25ModelProvider1P5B,
     Qwen25ModelProvider3B,
     Qwen25ModelProvider7B,
@@ -77,6 +85,15 @@ from megatron.bridge.models.qwen import (
     Qwen25ModelProvider32B,
     Qwen25ModelProvider72B,
     Qwen25ModelProvider500M,
+=======
+)
+from megatron.bridge.models.qwen_vl import (
+    Qwen2p5_VLModel,
+    Qwen2p5VLBridge,
+    Qwen2p5VLModelProvider,
+    Qwen2p5VLModelProvider3B,
+    Qwen2p5VLModelProvider7B,
+>>>>>>> ef32af19 (fix qwen2 vl bridge)
 )
 from megatron.bridge.models.t5_provider import T5ModelProvider
 
@@ -136,6 +153,11 @@ __all__ = [
     "Qwen3MoEModelProvider",
     "Qwen3MoEModelProvider30B_A3B",
     "Qwen3MoEModelProvider235B_A22B",
+    "Qwen2p5_VLModel",
+    "Qwen2p5VLBridge",
+    "Qwen2p5VLModelProvider",
+    "Qwen2p5VLModelProvider3B",
+    "Qwen2p5VLModelProvider7B",
     "DeepSeekV2LiteProvider",
     "DeepSeekV2Provider",
     "DeepSeekV3Provider",
