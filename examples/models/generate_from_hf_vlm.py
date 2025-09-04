@@ -30,14 +30,14 @@ Example:
 import argparse
 from typing import Optional
 
+import requests
 import torch
 import torch.distributed as dist
 from megatron.core import parallel_state
 from megatron.core.pipeline_parallel.schedules import get_forward_backward_func
-from transformers import AutoTokenizer, AutoProcessor
-from qwen_vl_utils import process_vision_info
 from PIL import Image
-import requests
+from qwen_vl_utils import process_vision_info
+from transformers import AutoProcessor, AutoTokenizer
 
 from megatron.bridge import AutoBridge
 from megatron.bridge.utils.common_utils import get_last_rank, print_rank_0
@@ -58,13 +58,13 @@ class SingleBatchIterator:
             position_ids=position_ids,
             attention_mask=attention_mask,
         )
-        
+
         # Add vision inputs if provided
         if pixel_values is not None:
             self.batch["pixel_values"] = pixel_values
         if image_grid_thw is not None:
             self.batch["image_grid_thw"] = image_grid_thw
-            
+
         self._yielded = False
 
     def __iter__(self):
@@ -98,7 +98,7 @@ def vlm_forward_step(data_iterator, model, **kwargs) -> torch.Tensor:
         "position_ids": batch["position_ids"],
         "attention_mask": batch.get("attention_mask", None),
     }
-    
+
     # Add vision inputs if present
     if "pixel_values" in batch:
         forward_args["pixel_values"] = batch["pixel_values"]
@@ -113,14 +113,14 @@ def vlm_forward_step(data_iterator, model, **kwargs) -> torch.Tensor:
 
 def load_image(image_path: str) -> Image.Image:
     """Load an image from URL or file path.
-    
+
     Args:
         image_path: URL or local file path to the image
-        
+
     Returns:
         PIL Image object
     """
-    if image_path.startswith(('http://', 'https://')):
+    if image_path.startswith(("http://", "https://")):
         response = requests.get(image_path)
         response.raise_for_status()
         return Image.open(requests.get(image_path, stream=True).raw)
@@ -130,12 +130,12 @@ def load_image(image_path: str) -> Image.Image:
 
 def process_image_inputs(processor, image_path: Optional[str], prompt: str):
     """Process image inputs for vision-language model.
-    
+
     Args:
         processor: AutoProcessor for the VL model
         image_path: Path or URL to the image (optional)
         prompt: Text prompt
-        
+
     Returns:
         Tuple of (input_ids, pixel_values, image_grid_thw, messages)
     """
@@ -150,15 +150,13 @@ def process_image_inputs(processor, image_path: Optional[str], prompt: str):
                 ],
             }
         ]
-        
+
         # Process vision info
         image_inputs, video_inputs = process_vision_info(messages)
-        
+
         # Apply chat template
-        text = processor.apply_chat_template(
-            messages, tokenize=False, add_generation_prompt=True
-        )
-        
+        text = processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+
         # Process inputs
         inputs = processor(
             text=[text],
@@ -167,7 +165,7 @@ def process_image_inputs(processor, image_path: Optional[str], prompt: str):
             padding=True,
             return_tensors="pt",
         )
-        
+
         return inputs.input_ids, inputs.pixel_values, inputs.image_grid_thw, messages
     else:
         # Text-only processing
@@ -238,17 +236,15 @@ def main(args) -> None:
 
     # Process inputs (text and image if provided)
     prompt = args.prompt
-    input_ids, pixel_values, image_grid_thw, messages = process_image_inputs(
-        processor, args.image_path, prompt
-    )
-    
+    input_ids, pixel_values, image_grid_thw, messages = process_image_inputs(processor, args.image_path, prompt)
+
     # Move to GPU
     input_ids = input_ids.cuda()
     if pixel_values is not None:
         pixel_values = pixel_values.cuda()
     if image_grid_thw is not None:
         image_grid_thw = image_grid_thw.cuda()
-    
+
     position_ids = (
         torch.arange(input_ids.size(1), dtype=torch.long, device=input_ids.device).unsqueeze(0).expand_as(input_ids)
     )
@@ -263,10 +259,10 @@ def main(args) -> None:
             print_rank_0(f"Generation step {step}")
 
             fwd_bwd_function = get_forward_backward_func()
-            # Pass vision inputs only on the first step, then None for subsequent steps
-            step_pixel_values = pixel_values if step == 0 else None
-            step_image_grid_thw = image_grid_thw if step == 0 else None
-            iterator = SingleBatchIterator(input_ids, position_ids, attention_mask, step_pixel_values, step_image_grid_thw)
+            # Keep passing vision inputs for all steps to ensure image features are available
+            # The Megatron VL model only processes vision features when pixel_values is not None,
+            # so we need to provide them throughout the generation process
+            iterator = SingleBatchIterator(input_ids, position_ids, attention_mask, pixel_values, image_grid_thw)
 
             output = fwd_bwd_function(
                 forward_step_func=vlm_forward_step,
