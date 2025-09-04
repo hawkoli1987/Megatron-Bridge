@@ -239,7 +239,7 @@ def main(args) -> None:
     # Process inputs (text and image if provided)
     prompt = args.prompt
     input_ids, pixel_values, image_grid_thw, messages = process_image_inputs(
-        processor, None, prompt
+        processor, args.image_path, prompt
     )
     
     # Move to GPU
@@ -280,7 +280,6 @@ def main(args) -> None:
             )
             if isinstance(output, list) and len(output) > 0:
                 output = output[0]
-            output = output.transpose(0, 1).contiguous()
 
             if parallel_state.is_pipeline_last_stage():
                 world_size = parallel_state.get_tensor_model_parallel_world_size()

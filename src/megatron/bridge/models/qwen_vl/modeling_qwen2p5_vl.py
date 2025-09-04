@@ -19,6 +19,7 @@ import torch
 from megatron.core.inference.contexts import BaseInferenceContext
 from megatron.core.packed_seq_params import PackedSeqParams
 from megatron.core.transformer.module import MegatronModule
+from megatron.core.tensor_parallel import scatter_to_sequence_parallel_region
 from torch import Tensor
 from transformers.models.qwen2_5_vl.modeling_qwen2_5_vl import (
     Qwen2_5_VisionTransformerPretrainedModel,
@@ -98,7 +99,6 @@ class Qwen2p5_VLModel(MegatronModule):
         self.language_model = self.config.provide_language_model(
             pre_process=pre_process, post_process=post_process, vp_stage=vp_stage
         )
-        self.rope_deltas = None  # cache rope_deltas here
 
         # Bind methods from HF's Qwen2_5_VLModel to this instance
         self.get_placeholder_mask = types.MethodType(Qwen2_5_VLModel.get_placeholder_mask, self)
@@ -141,7 +141,6 @@ class Qwen2p5_VLModel(MegatronModule):
 
         if self.pre_process:
             if inputs_embeds is None:
-                # inputs_embeds = self.get_input_embeddings()(input_ids)
                 inputs_embeds = self.language_model.embedding(
                     input_ids=input_ids, position_ids=None
                 )  # [decoder_seq_len, b, h_language]
@@ -171,9 +170,10 @@ class Qwen2p5_VLModel(MegatronModule):
             second_per_grid_ts=second_per_grid_ts,
             attention_mask=attention_mask,
         )
-        self.rope_deltas = rope_deltas
 
-        inputs_embeds.transpose(1, 0)  # [b, decoder_seq_len, h_language] -> [decoder_seq_len, b, h_language]
+        inputs_embeds = inputs_embeds.transpose(1, 0)  # [b, decoder_seq_len, h_language] -> [decoder_seq_len, b, h_language]
+        if self.config.sequence_parallel:
+            inputs_embeds = scatter_to_sequence_parallel_region(inputs_embeds)
         outputs = self.language_model.forward(
             input_ids=None,
             position_ids=position_ids,
