@@ -79,9 +79,9 @@ from megatron.bridge.models.qwen import (
     Qwen3MoEModelProvider235B_A22B,
 )
 from megatron.bridge.models.qwen_vl import (
-    Qwen2p5_VLModel,
-    Qwen2p5VLBridge,
-    Qwen2p5VLModelProvider,
+    Qwen25VLModel,
+    Qwen25VLBridge,
+    Qwen25VLModelProvider,
 )
 from megatron.bridge.models.t5_provider import T5ModelProvider
 
@@ -150,4 +150,7 @@ __all__ = [
     "DeepSeekV2Provider",
     "DeepSeekV3Provider",
     "MoonlightProvider",
+    "Qwen25VLModel",
+    "Qwen25VLBridge",
+    "Qwen25VLModelProvider",
 ]

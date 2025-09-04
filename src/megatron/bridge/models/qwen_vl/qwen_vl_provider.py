@@ -22,7 +22,7 @@ from megatron.bridge.models import (
     Qwen2ModelProvider,
 )
 
-from .modeling_qwen2p5_vl import Qwen2p5_VLModel
+from .modeling_qwen25_vl import Qwen25VLModel
 
 
 # =============================================================================
@@ -31,12 +31,12 @@ from .modeling_qwen2p5_vl import Qwen2p5_VLModel
 
 
 @dataclass
-class Qwen2p5VLModelProvider(Qwen2ModelProvider):
+class Qwen25VLModelProvider(Qwen2ModelProvider):
     """
     Base model provider for Qwen 2.5 VL Models.
     """
 
-    # Language configuration inherited from Qwen2p5ModelProvider3B
+    # Language configuration inherited from Qwen25ModelProvider3B
     # VL models shouldn't scatter embeddings across sequence parallel regions because
     # the vision embeddings are going to be inserted into the language embeddings.
     scatter_embedding_sequence_parallel: bool = False
@@ -55,8 +55,8 @@ class Qwen2p5VLModelProvider(Qwen2ModelProvider):
     image_token_id: int = 151655
     video_token_id: int = 151656
 
-    def provide(self, pre_process=None, post_process=None, vp_stage=None) -> Qwen2p5_VLModel:
-        return Qwen2p5_VLModel(self, pre_process=pre_process, post_process=post_process, vp_stage=vp_stage)
+    def provide(self, pre_process=None, post_process=None, vp_stage=None) -> Qwen25VLModel:
+        return Qwen25VLModel(self, pre_process=pre_process, post_process=post_process, vp_stage=vp_stage)
 
     def provide_language_model(self, pre_process=None, post_process=None, vp_stage=None) -> MCoreGPTModel:
         return super().provide(pre_process=pre_process, post_process=post_process, vp_stage=vp_stage)

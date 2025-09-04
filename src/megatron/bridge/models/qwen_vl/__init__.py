@@ -12,15 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from megatron.bridge.models.qwen_vl.modeling_qwen2p5_vl import Qwen2p5_VLModel  # noqa: F401
-from megatron.bridge.models.qwen_vl.qwen2p5_vl_bridge import Qwen2p5VLBridge  # noqa: F401
+from megatron.bridge.models.qwen_vl.modeling_qwen25_vl import Qwen25VLModel  # noqa: F401
+from megatron.bridge.models.qwen_vl.qwen25_vl_bridge import Qwen25VLBridge  # noqa: F401
 from megatron.bridge.models.qwen_vl.qwen_vl_provider import (
-    Qwen2p5VLModelProvider,
+    Qwen25VLModelProvider,
 )
 
 
 __all__ = [
-    "Qwen2p5_VLModel",
-    "Qwen2p5VLBridge",
-    "Qwen2p5VLModelProvider",
+    "Qwen25VLModel",
+    "Qwen25VLBridge",
+    "Qwen25VLModelProvider",
 ]
