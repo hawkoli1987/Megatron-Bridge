@@ -14,6 +14,7 @@
 
 import copy
 import os
+import warnings
 from dataclasses import dataclass, is_dataclass
 from dataclasses import fields as dataclass_fields
 from typing import Any, Optional, Type, TypeVar
@@ -186,12 +187,22 @@ class _ConfigContainerBase:
         Save the config container to a YAML file.
 
         Args:
-            yaml_path: Path where to save the YAML file
+            yaml_path: Path where to save the YAML file. If None, prints to stdout.
+
+        Note:
+            Printing to stdout is deprecated and will be removed in a future version.
+            Use print_yaml() instead.
         """
         config_dict = self.to_dict()
 
         with safe_yaml_representers():
             if yaml_path is None:
+                warnings.warn(
+                    "Calling to_yaml() without a path in order to print to stdout is deprecated "
+                    "and will be removed in a future version. Use print_yaml() instead.",
+                    DeprecationWarning,
+                    stacklevel=2,
+                )
                 print(yaml.safe_dump(config_dict, default_flow_style=False))
             else:
                 if MultiStorageClientFeature.is_enabled():
