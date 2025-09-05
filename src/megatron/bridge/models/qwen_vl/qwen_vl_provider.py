@@ -60,5 +60,3 @@ class Qwen25VLModelProvider(Qwen2ModelProvider):
 
     def provide_language_model(self, pre_process=None, post_process=None, vp_stage=None) -> MCoreGPTModel:
         return super().provide(pre_process=pre_process, post_process=post_process, vp_stage=vp_stage)
-
-
