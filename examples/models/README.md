@@ -392,28 +392,6 @@ Cosine similarity: 1.002266
 
 Provides utilities for deep debugging of model forward passes with detailed logging.
 
-## Common Parameters
-
-### Model Selection
-- `--hf_model_path` / `--hf-model-id`: HuggingFace model identifier or local path
-- `--megatron_model_path` / `--megatron-path`: Path to Megatron checkpoint (optional)
-
-### Parallelism Settings
-- `--tp`: Tensor parallelism size (default: 1)
-- `--pp`: Pipeline parallelism size (default: 1)
-- `--ep`: Expert parallelism size (default: 1)
-- `--etp`: Expert tensor parallelism size (default: 1)
-
-### Generation Parameters
-- `--prompt`: Input text prompt
-- `--max_new_tokens`: Maximum number of tokens to generate
-- `--image_path`: Path or URL to image (for VL models)
-
-### Advanced Options
-- `--enable_debug_hooks`: Enable detailed debugging
-
-#### Debug Hooks Detailed Logging
-
 When `--enable_debug_hooks` is enabled, the system generates comprehensive debug logs containing detailed information about neural network module execution during forward and backward passes.
 
 **Generated Files:**
@@ -432,5 +410,4 @@ Each log entry captures detailed tensor information for every module:
 **Use Cases:**
 - **Model Verification**: Compare intermediate results between HuggingFace and Megatron models
 - **Numerical Debugging**: Identify divergence points in model conversion
-- **Performance Analysis**: Monitor activation patterns and gradient flows
-- **Multi-GPU Debugging**: Separate logs per GPU rank for distributed training analysis
+
