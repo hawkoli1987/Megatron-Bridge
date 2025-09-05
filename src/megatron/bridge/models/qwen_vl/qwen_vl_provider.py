@@ -55,8 +55,23 @@ class Qwen25VLModelProvider(Qwen2ModelProvider):
     image_token_id: int = 151655
     video_token_id: int = 151656
 
+    # Freeze options
+    freeze_language_model: bool = False
+    freeze_vision_model: bool = False
+    freeze_vision_projection: bool = False
+
     def provide(self, pre_process=None, post_process=None, vp_stage=None) -> Qwen25VLModel:
-        return Qwen25VLModel(self, pre_process=pre_process, post_process=post_process, vp_stage=vp_stage)
+        model = Qwen25VLModel(self, pre_process=pre_process, post_process=post_process, vp_stage=vp_stage)
+        
+        # Apply freeze options if any are enabled
+        if self.freeze_language_model or self.freeze_vision_model or self.freeze_vision_projection:
+            model.freeze(
+                freeze_language_model=self.freeze_language_model,
+                freeze_vision_model=self.freeze_vision_model,
+                freeze_vision_projection=self.freeze_vision_projection,
+            )
+        
+        return model
 
     def provide_language_model(self, pre_process=None, post_process=None, vp_stage=None) -> MCoreGPTModel:
         return super().provide(pre_process=pre_process, post_process=post_process, vp_stage=vp_stage)
