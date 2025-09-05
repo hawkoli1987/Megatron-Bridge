@@ -188,3 +188,36 @@ class Qwen25VLModel(MegatronModule):
             runtime_gather_output=runtime_gather_output,
         )
         return outputs
+
+    def freeze(
+        self, freeze_language_model: bool, freeze_vision_model: bool, freeze_vision_projection: bool
+    ):
+        """Freeze model modules.
+
+        Make specific modules non-trainable by setting requires_grad to False.
+
+        Args:
+            freeze_language_model (bool): Freeze the language model module.
+            freeze_vision_model (bool): Freeze the vision model module (patch_embed and blocks).
+            freeze_vision_projection (bool): Freeze the vision projection module (merger).
+        """
+        modules = []
+        
+        if freeze_language_model and hasattr(self, 'language_model') and self.language_model is not None:
+            modules.append(self.language_model)
+            
+        if freeze_vision_model and hasattr(self, 'visual') and self.visual is not None:
+            # Vision model consists of patch_embed and blocks
+            if hasattr(self.visual, 'patch_embed'):
+                modules.append(self.visual.patch_embed)
+            if hasattr(self.visual, 'blocks'):
+                modules.append(self.visual.blocks)
+                
+        if freeze_vision_projection and hasattr(self, 'visual') and self.visual is not None:
+            # Vision projection is the merger module
+            if hasattr(self.visual, 'merger'):
+                modules.append(self.visual.merger)
+
+        for module in modules:
+            for param in module.parameters():
+                param.requires_grad = False
