@@ -202,6 +202,14 @@ class _ConfigContainerBase:
                     with open(yaml_path, "w") as f:
                         yaml.safe_dump(config_dict, f, default_flow_style=False)
 
+    def print_yaml(self) -> None:
+        """
+        Print the config container to the console in YAML format.
+        """
+        config_dict = self.to_dict()
+        with safe_yaml_representers():
+            print(yaml.safe_dump(config_dict, default_flow_style=False))
+
     def __deepcopy__(self, memo):
         """Support for deep copying."""
         cls = self.__class__
