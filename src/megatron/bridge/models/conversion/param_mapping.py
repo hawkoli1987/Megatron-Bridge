@@ -90,6 +90,9 @@ class MegatronParamMapping(ABC, Generic[WeightType]):
         self.hf_param = hf_param
         self._validate_patterns()
 
+        # Cache for broadcast_obj_from_pp_rank results
+        self._broadcast_obj_cache = {}
+
         if mpu.is_initialized():
             self.pp_group = mpu.get_pipeline_model_parallel_group()
             self.ep_group = mpu.get_expert_model_parallel_group()
@@ -310,14 +313,17 @@ class MegatronParamMapping(ABC, Generic[WeightType]):
 
         return tensor
 
-    def broadcast_obj_from_pp_rank(self, obj: Optional[Any]) -> Any:
+    def broadcast_obj_from_pp_rank(self, obj: Optional[Any], cache_key: Optional[str] = None) -> Any:
         """Broadcast any Python object from the PP rank that owns it.
 
         This method is useful for broadcasting configuration objects or
-        other metadata across pipeline parallel ranks.
+        other metadata across pipeline parallel ranks. Results are cached
+        after the first call to avoid redundant broadcasts.
 
         Args:
             obj (Optional[Any]): Object to broadcast (None on non-owning ranks).
+            cache_key (Optional[str]): Optional cache key. If not provided,
+                no caching will be performed.
 
         Returns:
             Any: Broadcasted object on all ranks.
@@ -327,6 +333,10 @@ class MegatronParamMapping(ABC, Generic[WeightType]):
         """
         if self.pp_size == 1:
             return obj
+
+        # Check if we already have a cached result (only if cache_key is provided)
+        if cache_key is not None and cache_key in self._broadcast_obj_cache:
+            return self._broadcast_obj_cache[cache_key]
 
         # ------------------------------------------------------------------
         # 1. Gather presence flags from all PP ranks to find the source rank
@@ -358,7 +368,21 @@ class MegatronParamMapping(ABC, Generic[WeightType]):
         global_src = pp_ranks[src_rank]
         torch.distributed.broadcast_object_list(obj_list, src=global_src, group=self.pp_group)
 
-        return obj_list[0]
+        result = obj_list[0]
+
+        # Cache the result for future calls (only if cache_key is provided)
+        if cache_key is not None:
+            self._broadcast_obj_cache[cache_key] = result
+
+        return result
+
+    def clear_broadcast_cache(self):
+        """Clear the broadcast object cache.
+
+        This can be useful for testing or if the objects being broadcast
+        might change during the lifetime of the mapping.
+        """
+        self._broadcast_obj_cache.clear()
 
     def broadcast_tensor_to_tp_ranks(self, tensor: torch.Tensor, src_rank: int = 0) -> torch.Tensor:
         """Broadcast a tensor to all TP ranks.
@@ -517,12 +541,12 @@ class MegatronParamMapping(ABC, Generic[WeightType]):
             Dict[str, torch.Tensor]: Dictionary of expert weights mapped to HF parameter names.
         """
         if megatron_module is None:
-            num_experts_per_rank = self.broadcast_obj_from_pp_rank(None)
+            num_experts_per_rank = self.broadcast_obj_from_pp_rank(None, "num_experts_per_rank")
         else:
             model_config = self._get_config(megatron_module)
             num_experts = model_config.num_moe_experts
             num_experts_per_rank = num_experts // self.ep_size
-            num_experts_per_rank = self.broadcast_obj_from_pp_rank(num_experts_per_rank)
+            num_experts_per_rank = self.broadcast_obj_from_pp_rank(num_experts_per_rank, "num_experts_per_rank")
 
         # Extract local expert number from parameter name
         # Handle both .weight and .bias suffixes
@@ -1024,10 +1048,10 @@ class AutoMapping(MegatronParamMapping[torch.Tensor]):
             if megatron_module is not None:
                 self._detected_type = self._detect_parallelism_type(megatron_module)
                 # Broadcast to other ranks
-                self._detected_type = self.broadcast_obj_from_pp_rank(self._detected_type)
+                self._detected_type = self.broadcast_obj_from_pp_rank(self._detected_type, "detected_type")
             else:
                 # Receive from owning rank
-                self._detected_type = self.broadcast_obj_from_pp_rank(None)
+                self._detected_type = self.broadcast_obj_from_pp_rank(None, "detected_type")
 
             self._mapping = self._get_or_create_mapping(self._detected_type)
 
@@ -1132,12 +1156,12 @@ class QKVMapping(MegatronParamMapping[Dict[str, torch.Tensor]]):
         # collective communication.
         # ------------------------------------------------------------------
         if megatron_module is None:
-            config = self.broadcast_obj_from_pp_rank(None)
+            config = self.broadcast_obj_from_pp_rank(None, "qkv_config")
         else:
             config = self._get_config(megatron_module)
             # create shallow copy and remove non-picklable objects with max depth=2
             config = remove_non_pickleables(config, max_depth=2)
-            config = self.broadcast_obj_from_pp_rank(config)
+            config = self.broadcast_obj_from_pp_rank(config, "qkv_config")
 
         # Delegate TP/PP gathering.
         packed_dict = self._tp_mapping.megatron_to_hf(megatron_weights, megatron_module)
