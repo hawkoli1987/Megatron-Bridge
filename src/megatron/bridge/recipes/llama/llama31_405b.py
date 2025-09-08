@@ -104,7 +104,7 @@ def pretrain_config(
     min_lr: float = 3e-5,
     lr_warmup_iters: int = 2000,
     # Precision recipe
-    precision_config: Optional[Union[MixedPrecisionConfig, str]] = "bf16_mixed",
+    precision_config: Optional[Union[MixedPrecisionConfig, str]] = None,
     comm_overlap_config: Optional[CommOverlapConfig] = None,
     vocab_size: int = 128256,
 ) -> ConfigContainer:
@@ -170,6 +170,11 @@ def pretrain_config(
         max_lr=lr,
         min_lr=min_lr,
     )
+
+    if precision_config is None:
+        precision_config = bf16_mixed()
+    if isinstance(precision_config, MixedPrecisionConfig):
+        precision_config.grad_reduce_in_fp32 = False
 
     # Config Container
     cfg = ConfigContainer(

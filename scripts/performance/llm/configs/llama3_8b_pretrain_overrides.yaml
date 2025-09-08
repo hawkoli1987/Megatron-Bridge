@@ -18,7 +18,6 @@
 
 model:
   context_parallel_size: 2
-  cross_entropy_fusion_impl: "te"
   enable_cuda_graph: false
   use_te_rng_tracker: false
 
@@ -44,9 +43,6 @@ logger:
 ddp:
   check_for_nan_in_grad: false
   check_for_large_grads: false
-
-mixed_precision:
-  grad_reduce_in_fp32: false
 
 profiling:
   # For optional fields in the config, specify the target to instantiate the object.
