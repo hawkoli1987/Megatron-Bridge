@@ -36,10 +36,13 @@ from megatron.bridge.models.gpt_provider import GPTModelProvider
 from megatron.bridge.models.hf_pretrained.causal_lm import PreTrainedCausalLM
 from megatron.bridge.models.hf_pretrained.state import SafeTensorsStateSource
 from megatron.bridge.models.model_provider import GetModelKwargs, ModelProviderMixin
+from megatron.bridge.utils.safe_config_loader import safe_load_config_with_retry
 
 
 MegatronModelT = TypeVar("MegatronModelT", bound=MegatronModule)
 DataclassT = TypeVar("DataclassT")
+
+
 
 
 class AutoBridge(Generic[MegatronModelT]):
@@ -220,14 +223,8 @@ class AutoBridge(Generic[MegatronModelT]):
             >>> bridge = AutoBridge.from_hf_pretrained("/path/to/model")
         """
         # First load just the config to check architecture support
-        try:
-            config = AutoConfig.from_pretrained(path, trust_remote_code=kwargs.get("trust_remote_code", False))
-        except Exception as e:
-            raise ValueError(
-                f"Failed to load configuration from {path}. "
-                f"Ensure the path is valid and contains a config.json file. "
-                f"Error: {e}"
-            )
+        # Use thread-safe config loading to prevent race conditions
+        config = safe_load_config_with_retry(path, trust_remote_code=kwargs.get("trust_remote_code", False))
 
         cls._validate_config(config, str(path))
 
@@ -261,7 +258,7 @@ class AutoBridge(Generic[MegatronModelT]):
             ...     print("Model requires a custom bridge implementation")
         """
         try:
-            config = AutoConfig.from_pretrained(path, trust_remote_code=trust_remote_code)
+            config = safe_load_config_with_retry(path, trust_remote_code=trust_remote_code)
             return cls.supports(config)
         except Exception:
             return False
