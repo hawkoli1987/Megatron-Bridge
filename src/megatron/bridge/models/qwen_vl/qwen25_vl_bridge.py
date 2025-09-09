@@ -25,7 +25,7 @@ from megatron.bridge.models.conversion.param_mapping import (
 )
 from megatron.bridge.models.hf_pretrained.vlm import PreTrainedVLM
 from megatron.bridge.models.qwen_vl.modeling_qwen25_vl import Qwen25VLModel
-from megatron.bridge.models.qwen_vl.qwen_vl_provider import Qwen25VLModelProvider, Qwen25VLVisionConfig
+from megatron.bridge.models.qwen_vl.qwen_vl_provider import Qwen25VLModelProvider
 
 
 @MegatronModelBridge.register_bridge(source=Qwen2_5_VLForConditionalGeneration, target=Qwen25VLModel)
@@ -65,7 +65,7 @@ class Qwen25VLBridge(MegatronModelBridge):
             params_dtype=self.dtype_from_hf(hf_config, default=torch.float32),
             generation_config=hf_pretrained.generation_config,
             add_qkv_bias=True,  # Qwen2 has bias in QKV projections
-            vision_config=Qwen25VLVisionConfig.from_hf_config(hf_config.vision_config),
+            vision_config=hf_config.vision_config,
             # VL-specific token IDs
             bos_token_id=getattr(hf_config, "bos_token_id", 151643),
             eos_token_id=getattr(hf_config, "eos_token_id", 151645),
