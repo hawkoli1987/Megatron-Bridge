@@ -28,7 +28,7 @@ from transformers import (
 from transformers.generation.utils import GenerateOutput
 
 from megatron.bridge.models.hf_pretrained.base import PreTrainedBase
-from megatron.bridge.utils.safe_config_loader import safe_load_config_with_retry
+from megatron.bridge.models.hf_pretrained.safe_config_loader import safe_load_config_with_retry
 
 
 # Python 3.12+ supports PEP 692 (TypedDict Unpack)

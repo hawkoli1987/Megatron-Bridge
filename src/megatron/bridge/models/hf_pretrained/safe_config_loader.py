@@ -21,6 +21,7 @@ multiple threads try to download and cache the same model simultaneously.
 """
 
 import hashlib
+import os
 import time
 from pathlib import Path
 from typing import Union
@@ -47,6 +48,8 @@ def safe_load_config_with_retry(
     
     This function prevents race conditions when multiple threads/processes
     try to download and cache the same model configuration simultaneously.
+    Uses file locking (if filelock is available) to coordinate access across
+    processes.
     
     Args:
         path: HuggingFace model ID or path to model directory
@@ -60,6 +63,11 @@ def safe_load_config_with_retry(
         
     Raises:
         ValueError: If config loading fails after all retries
+    
+    Environment Variables:
+        MEGATRON_CONFIG_LOCK_DIR: Override the directory where lock files are created.
+            Default: ~/.cache/huggingface/
+            Useful for multi-node setups where a shared lock directory is needed.
         
     Example:
         >>> config = safe_load_config_with_retry("meta-llama/Llama-3-8B")
@@ -72,6 +80,11 @@ def safe_load_config_with_retry(
         ...     base_delay=0.5,
         ...     trust_remote_code=True
         ... )
+        
+        >>> # Multi-node setup with shared lock directory
+        >>> import os
+        >>> os.environ["MEGATRON_CONFIG_LOCK_DIR"] = "/shared/locks"
+        >>> config = safe_load_config_with_retry("meta-llama/Llama-3-8B")
     """
     last_exception = None
     
@@ -81,7 +94,15 @@ def safe_load_config_with_retry(
                 # Use file locking for process-safe access
                 # Create a lock file based on the path hash to avoid conflicts
                 path_hash = hashlib.md5(str(path).encode()).hexdigest()
-                lock_file = Path.home() / ".cache" / "huggingface" / f".megatron_config_lock_{path_hash}"
+                
+                # Allow override of lock directory via environment variable
+                # This is useful for multi-node setups where a shared lock directory is needed
+                lock_dir = os.getenv("MEGATRON_CONFIG_LOCK_DIR")
+                if lock_dir:
+                    lock_file = Path(lock_dir) / f".megatron_config_lock_{path_hash}"
+                else:
+                    lock_file = Path.home() / ".cache" / "huggingface" / f".megatron_config_lock_{path_hash}"
+                
                 lock_file.parent.mkdir(parents=True, exist_ok=True)
                 
                 with filelock.FileLock(str(lock_file) + ".lock", timeout=60):

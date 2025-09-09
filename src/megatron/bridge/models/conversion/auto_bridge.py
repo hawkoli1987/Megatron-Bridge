@@ -36,7 +36,7 @@ from megatron.bridge.models.gpt_provider import GPTModelProvider
 from megatron.bridge.models.hf_pretrained.causal_lm import PreTrainedCausalLM
 from megatron.bridge.models.hf_pretrained.state import SafeTensorsStateSource
 from megatron.bridge.models.model_provider import GetModelKwargs, ModelProviderMixin
-from megatron.bridge.utils.safe_config_loader import safe_load_config_with_retry
+from megatron.bridge.models.hf_pretrained.safe_config_loader import safe_load_config_with_retry
 
 
 MegatronModelT = TypeVar("MegatronModelT", bound=MegatronModule)
