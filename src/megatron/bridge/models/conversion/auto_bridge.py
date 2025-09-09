@@ -21,7 +21,6 @@ import torch.distributed
 import transformers
 from megatron.core.transformer.module import MegatronModule
 from megatron.core.transformer.transformer_config import MLATransformerConfig, TransformerConfig
-from transformers import AutoConfig
 from transformers.configuration_utils import PretrainedConfig
 from typing_extensions import Unpack
 
@@ -34,15 +33,13 @@ from megatron.bridge.models.conversion.model_bridge import (
 from megatron.bridge.models.conversion.utils import get_causal_lm_class_via_auto_map
 from megatron.bridge.models.gpt_provider import GPTModelProvider
 from megatron.bridge.models.hf_pretrained.causal_lm import PreTrainedCausalLM
+from megatron.bridge.models.hf_pretrained.safe_config_loader import safe_load_config_with_retry
 from megatron.bridge.models.hf_pretrained.state import SafeTensorsStateSource
 from megatron.bridge.models.model_provider import GetModelKwargs, ModelProviderMixin
-from megatron.bridge.models.hf_pretrained.safe_config_loader import safe_load_config_with_retry
 
 
 MegatronModelT = TypeVar("MegatronModelT", bound=MegatronModule)
 DataclassT = TypeVar("DataclassT")
-
-
 
 
 class AutoBridge(Generic[MegatronModelT]):
