@@ -405,3 +405,137 @@ When using Slurm, the system automatically:
 3. **Test Signal Handling**: Verify preemption works correctly in your environment
 4. **Regular Checkpointing**: Ensure regular checkpoint intervals to minimize potential data loss
 5. **Resource Cleanup**: The system handles cleanup automatically, but monitor for any resource leaks
+
+## Re-run State Machine
+
+The re-run state machine is an experimental feature that helps with attribution of unexpected results such as NaN values, spiky loss, or other computational anomalies. It works by re-running computations to determine whether issues are transient errors, persistent hardware faults, or actually correct results.
+
+> **Disclaimer**: This is an experimental alpha-level feature for result attribution. Nodes flagged by this system should be subjected to standard diagnostic test suites for confirmation.
+
+### Key Features
+
+- **Automatic Re-run Logic**: Detects unexpected results and automatically re-runs computations to verify reproducibility
+- **Error Attribution**: Classifies issues as transient errors, persistent errors, or correct results
+- **Multi-stage Validation**: Uses in-place re-runs and checkpoint-based re-runs on different hardware
+- **Determinism Tracking**: Can report statistics on computational non-determinism
+- **State Management**: Handles RNG state and data iterator state for reproducible re-runs
+
+### How It Works
+
+The re-run state machine operates through several stages:
+
+1. **Initial Run**: Executes the training step normally, validating results
+2. **First Re-run (In-place)**: If validation fails, re-runs on the same GPU to check reproducibility
+3. **Second Re-run (Different GPU)**: If the issue is reproducible, saves checkpoint and re-runs on different hardware
+4. **Attribution**: Determines if the issue is a transient error, persistent error, or correct result
+
+### Configuration
+
+Configure the re-run state machine through `RerunStateMachineConfig`:
+
+```python
+from megatron.bridge.training.config import RerunStateMachineConfig
+
+# Configure re-run state machine in your config
+config.rerun_state_machine = RerunStateMachineConfig(
+    rerun_mode="validate_results",  # or "report_stats" or "disabled"
+    check_for_nan_in_loss=True,
+    check_for_spiky_loss=False,
+    error_injection_rate=0,  # For testing only
+    error_injection_type="transient_error",
+)
+```
+
+### Configuration Options
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `rerun_mode` | `str` | `"disabled"` | Operating mode: `"disabled"`, `"validate_results"`, or `"report_stats"` |
+| `check_for_nan_in_loss` | `bool` | `True` | Check for NaN values in loss |
+| `check_for_spiky_loss` | `bool` | `False` | Check for unexpectedly large loss values |
+| `error_injection_rate` | `int` | `0` | Rate for injecting test errors (testing only) |
+| `error_injection_type` | `str` | `"transient_error"` | Type of error to inject for testing |
+
+### Operating Modes
+
+#### 1. Disabled Mode (`disabled`)
+- **Purpose**: No result validation or re-run logic
+- **Behavior**: Training proceeds normally without any result checking
+- **Use Case**: When re-run overhead is not acceptable or validation is not needed
+
+#### 2. Report Stats Mode (`report_stats`)  
+- **Purpose**: Collect statistics on computational determinism
+- **Behavior**: Re-runs every step once to measure variability
+- **Output**: Reports on computational non-determinism without stopping training
+
+#### 3. Validate Results Mode (`validate_results`)
+- **Purpose**: Full validation with re-runs and hardware fault attribution
+- **Behavior**: Re-runs computations when unexpected results are detected
+- **Exit Conditions**: May exit with specific codes for checkpointing or validation failure
+
+### Integration with Training
+
+The re-run state machine integrates at the training step level:
+
+```python
+# In train_step function
+rerun_state_machine = get_rerun_state_machine()
+while rerun_state_machine.should_run_forward_backward(data_iterator):
+    # Execute forward-backward pass
+    loss_dict = forward_backward_func(...)
+    
+    # Validate results (automatically handled in forward_step)
+    # check_for_nan_in_loss and check_for_spiky_loss are passed to loss function
+
+should_checkpoint, should_exit, exit_code = rerun_state_machine.should_checkpoint_and_exit()
+if should_checkpoint:
+    save_checkpoint(...)
+if should_exit:
+    sys.exit(exit_code)
+```
+
+### Exit Codes
+
+The re-run state machine uses specific exit codes to control job behavior:
+
+- **Exit Code 16** (`EXIT_CODE_RESUME_TO_DISAMBIGUATE`): Job should be restarted from checkpoint to re-run on different hardware
+- **Exit Code 17** (`EXIT_CODE_FAILED_ON_RESULT_VALIDATION`): Job failed validation and should not continue
+
+### Expected Behavior
+
+#### Validation Success
+When validation passes, training continues normally with no additional overhead.
+
+#### Transient Error Detection
+```
+Unexpected result tensor(nan) on rank 0 at iteration #150 invocation #1 (message='loss is NaN')
+First rerun: unexpected result is not reproducible within the tolerance
+Possible transient error!
+```
+
+#### Persistent Error Detection  
+```
+First rerun: unexpected result is reproducible within the tolerance
+Need to rerun on a different GPU to verify correctness
+Second rerun: unexpected result is not reproducible on a different GPU, therefore was likely incorrect
+Possible persistent error!
+```
+
+#### Correct Result (False Positive)
+```
+Second rerun: unexpected result is reproducible on a different GPU, therefore it was likely correct
+Correct result (but possible Application error)
+```
+
+### Result Attribution Categories
+
+1. **Transient Error**: Result not reproducible on same GPU - likely temporary hardware glitch
+2. **Persistent Error**: Result reproducible on same GPU but different on other GPU - likely hardware fault
+3. **Correct Result**: Result reproducible across different GPUs - likely correct but unexpected
+
+### Data Iterator Integration
+
+The system uses `RerunDataIterator` to handle data replay:
+- **State Saving**: Captures data iterator state for reproducible re-runs
+- **Replay Capability**: Can rewind and replay the same data batches
+- **Checkpoint Support**: Saves/restores iterator state across job restarts
