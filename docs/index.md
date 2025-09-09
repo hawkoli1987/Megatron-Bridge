@@ -19,6 +19,7 @@ training/training-config.md
 training/optimizer-scheduler-config.md
 training/checkpointing-config.md
 training/peft-config.md
+training/resiliency.md
 ```
 
 ```{toctree}

@@ -33,6 +33,10 @@ The relationship between batch sizes:
 | `eval_interval` | `Optional[int]` | `1000` | Interval between validation runs |
 | `skip_train` | `bool` | `False` | Skip training, only do evaluation and exit |
 
+**Note:** To control validation behavior:
+- Set `eval_iters` to `0` to disable validation entirely (both during and after training).
+- Set `eval_interval` to `None` to skip validation during training, but still run validation after training completes.
+
 ### Memory Management
 
 | Parameter | Type | Default | Description |
