@@ -15,6 +15,7 @@ performance-guide.md
 :hidden:
 
 training/config-container-overview.md
+training/entry-points.md
 training/training-config.md
 training/optimizer-scheduler-config.md
 training/checkpointing-config.md
