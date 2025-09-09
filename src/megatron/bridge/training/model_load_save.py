@@ -284,7 +284,7 @@ def build_and_load_model(
         else:
             model = _call_model_provider(model_cfg)
 
-        if model_cfg.use_modelopt == True:
+        if model_cfg.use_modelopt:
             from megatron.bridge.training.post_training.checkpointing import (
                 load_modelopt_checkpoint,
                 load_modelopt_state,
