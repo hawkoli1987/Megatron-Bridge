@@ -387,7 +387,6 @@ class Qwen3MoEModelProvider30B_A3B(Qwen3MoEModelProvider):
     num_query_groups: int = 4
     ffn_hidden_size: int = 6144
     moe_ffn_hidden_size: int = 768
-    cross_entropy_fusion_impl: str = "te"
 
 
 @dataclass
@@ -402,4 +401,3 @@ class Qwen3MoEModelProvider235B_A22B(Qwen3MoEModelProvider):
     num_query_groups: int = 4
     ffn_hidden_size: int = 12288
     moe_ffn_hidden_size: int = 1536
-    cross_entropy_fusion_impl: str = "te"
