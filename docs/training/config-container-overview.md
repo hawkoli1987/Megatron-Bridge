@@ -100,6 +100,7 @@ You do not need to manually validate configurations - this process occurs automa
 
 ## Configuration Export and Import
 The `ConfigContainer` supports serialization to and from YAML, allowing configurations to be saved, shared, and reloaded across training sessions.
+The `ConfigContainer` supports serialization to and from YAML, allowing configurations to be saved, shared, and reloaded across training sessions.
 
 ### Export to YAML
 ```python

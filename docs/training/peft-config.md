@@ -45,6 +45,7 @@ config = ConfigContainer(
 
 ## Supported PEFT Methods
 Megatron Bridge supports two efficient fine-tuning techniques—LoRA and DoRA—that adapt large language models with minimal overhead. These methods update only a small set of parameters, preserving the original weights and avoiding changes to model architecture or inference speed. Below is a quick guide to configuring and applying them.
+Megatron Bridge supports two efficient fine-tuning techniques—LoRA and DoRA—that adapt large language models with minimal overhead. These methods update only a small set of parameters, preserving the original weights and avoiding changes to model architecture or inference speed. Below is a quick guide to configuring and applying them.
 
 ### [LoRA: Low-Rank Adaptation of Large Language Models](https://arxiv.org/abs/2106.09685)
 
@@ -138,6 +139,7 @@ The following table lists key hyperparameters for configuring DoRA, which contro
 | `dropout` | `float` | `0.0` | Dropout rate for DoRA layers |
 
 ## Full Configuration Example
+The following example demonstrates a complete setup for PEFT fine-tuning using LoRA within the Megatron framework.
 The following example demonstrates a complete setup for PEFT fine-tuning using LoRA within the Megatron framework.
 
 ```python
