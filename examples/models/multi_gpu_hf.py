@@ -82,6 +82,7 @@ def main(
         model_provider = bridge.to_megatron_provider(load_weights=False)
         model_provider.tensor_model_parallel_size = tp
         model_provider.pipeline_model_parallel_size = pp
+        model_provider.pipeline_dtype = torch.bfloat16
         model_provider.expert_model_parallel_size = ep
         model_provider.expert_tensor_parallel_size = etp
 
@@ -95,11 +96,47 @@ def main(
         model_provider = bridge.to_megatron_provider(load_weights=True)
         model_provider.tensor_model_parallel_size = tp
         model_provider.pipeline_model_parallel_size = pp
+        model_provider.pipeline_dtype = torch.bfloat16
         model_provider.expert_model_parallel_size = ep
 
         # Once all overrides are set, finalize the model provider to ensure the post initialization logic is run
+        import logging
+
+        logging.basicConfig(level=logging.CRITICAL)
+        from megatron.bridge.utils.common_utils import get_rank_safe
+
+        if get_rank_safe() == 0:
+            logging.critical("\n=== Model Provider Before Finalize ===")
+            logging.critical(f"tensor_model_parallel_size: {model_provider.tensor_model_parallel_size}")
+            logging.critical(f"num_attention_heads: {model_provider.num_attention_heads}")
+            logging.critical(f"kv_channels: {getattr(model_provider, 'kv_channels', 'NOT_SET')}")
+            logging.critical(f"num_query_groups: {getattr(model_provider, 'num_query_groups', 'NOT_SET')}")
+
         model_provider.finalize()
+
+        if get_rank_safe() == 0:
+            logging.critical("\n=== Model Provider After Finalize ===")
+            logging.critical(f"tensor_model_parallel_size: {model_provider.tensor_model_parallel_size}")
+            logging.critical(f"num_attention_heads: {model_provider.num_attention_heads}")
+            logging.critical(f"kv_channels: {getattr(model_provider, 'kv_channels', 'NOT_SET')}")
+            logging.critical(f"num_query_groups: {getattr(model_provider, 'num_query_groups', 'NOT_SET')}")
+
+        # MLA-specific debugging
+        if hasattr(model_provider, "q_lora_rank"):
+            if get_rank_safe() == 0:
+                logging.critical(f"q_lora_rank: {model_provider.q_lora_rank}")
+                logging.critical(f"kv_lora_rank: {getattr(model_provider, 'kv_lora_rank', 'NOT_SET')}")
+        if get_rank_safe() == 0:
+            logging.critical("=" * 50)
         model_provider.initialize_model_parallel(seed=0)
+
+        # Debug: Check state right before model creation
+        if get_rank_safe() == 0:
+            logging.critical("\n=== RIGHT BEFORE provide_distributed_model ===")
+            logging.critical(f"num_query_groups: {getattr(model_provider, 'num_query_groups', 'NOT_SET')}")
+            logging.critical(f"kv_channels: {getattr(model_provider, 'kv_channels', 'NOT_SET')}")
+            logging.critical("=" * 50)
+
         megatron_model = model_provider.provide_distributed_model(wrap_with_ddp=False)
 
     # Now we can check for rank

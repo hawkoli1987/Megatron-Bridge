@@ -214,6 +214,18 @@ class GPTModelProvider(TransformerConfig, ModelProviderMixin[MCoreGPTModel]):
         if "mtp_block_spec" in inspect.signature(MCoreGPTModel.__init__).parameters:
             kwargs["mtp_block_spec"] = mtp_block_spec(self, vp_stage=vp_stage)
 
+        # Debug: Check config state right before MCoreGPTModel creation
+        import logging
+
+        from megatron.bridge.utils.common_utils import get_rank_safe
+
+        if get_rank_safe() == 0:
+            logging.critical("\n=== GPTModelProvider.provide() DEBUG ===")
+            logging.critical(f"self.num_query_groups = {getattr(self, 'num_query_groups', 'NOT_SET')}")
+            logging.critical(f"self.kv_channels = {getattr(self, 'kv_channels', 'NOT_SET')}")
+            logging.critical(f"self type: {type(self).__name__}")
+            logging.critical("=" * 40)
+
         with model_init_device_context():
             model = MCoreGPTModel(
                 self,

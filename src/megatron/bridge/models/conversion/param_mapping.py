@@ -478,7 +478,21 @@ class MegatronParamMapping(ABC, Generic[WeightType]):
         current = module
         while current is not None:
             if hasattr(current, "config"):
-                return current.config
+                # Debug: Check what config is being used in weight mapping
+                import logging
+
+                config = current.config
+                logging.critical("\n=== Weight Mapping Config Debug ===")
+                logging.critical(f"Config type: {type(config).__name__}")
+                logging.critical(f"num_query_groups: {getattr(config, 'num_query_groups', 'NOT_SET')}")
+                logging.critical(f"kv_channels: {getattr(config, 'kv_channels', 'NOT_SET')}")
+                logging.critical(f"num_attention_heads: {getattr(config, 'num_attention_heads', 'NOT_SET')}")
+                if hasattr(config, "finalize"):
+                    logging.critical("Has finalize method: True")
+                else:
+                    logging.critical("Has finalize method: False")
+                logging.critical("=" * 40)
+                return config
             # Try parent module
             if hasattr(current, "_parent"):
                 current = current._parent
@@ -776,6 +790,21 @@ class RowParallelMapping(MegatronParamMapping[torch.Tensor]):
         else:
             splits = None
 
+        # Debug: Log row parallel conversion details
+        import logging
+
+        from megatron.bridge.utils.common_utils import get_rank_safe
+
+        if get_rank_safe() == 0:
+            logging.critical("\n=== RowParallel Debug ===")
+            logging.critical(f"Megatron param: {self.megatron_param}")
+            logging.critical(f"HF param: {self.hf_param}")
+            logging.critical(f"HF weight shape: {hf_weights.shape if hf_weights is not None else 'None'}")
+            logging.critical(f"Target param shape: {target_param.shape}")
+            if splits and self.tp_rank == 0:
+                logging.critical(f"Split shapes: {[s.shape for s in splits]}")
+            logging.critical("=" * 30)
+
         # Scatter to all ranks. Each rank gets its sharded shape from its module.
         return self.scatter_to_tp_ranks(
             splits,
@@ -1044,6 +1073,21 @@ class AutoMapping(MegatronParamMapping[torch.Tensor]):
         if self._mapping is None:
             self._detected_type = self._detect_parallelism_type(megatron_module)
             self._mapping = self._get_or_create_mapping(self._detected_type)
+
+        # Debug: Log weight conversion details
+        import logging
+
+        from megatron.bridge.utils.common_utils import get_rank_safe
+
+        if get_rank_safe() == 0:
+            logging.critical("\n=== AutoMapping Debug ===")
+            logging.critical(f"Megatron param: {self.megatron_param}")
+            logging.critical(f"HF param: {self.hf_param}")
+            logging.critical(f"HF weight shape: {hf_weights.shape}")
+            logging.critical(f"Module type: {type(megatron_module).__name__}")
+            logging.critical(f"Detected parallelism: {self._detected_type}")
+            logging.critical(f"TP size: {self.tp_size}")
+            logging.critical("=" * 30)
 
         return self._mapping.hf_to_megatron(hf_weights, megatron_module)
 

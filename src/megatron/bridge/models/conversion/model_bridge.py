@@ -582,6 +582,16 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
         model_config = unwrap_model(megatron_model)[0].config
         embeddings_are_tied = model_config.share_embeddings_and_output_weights
         for task in self._with_progress_tracking(megatron_to_hf_tasks, "Converting to HuggingFace", show_progress):
+            # Debug: Check if mapping is None
+            if task.mapping is None:
+                import logging
+
+                logging.critical("\n=== EXPORT ERROR: None mapping ===")
+                logging.critical(f"Megatron param: {getattr(task, 'megatron_param_name', 'UNKNOWN')}")
+                logging.critical(f"Task: {task}")
+                logging.critical("=" * 40)
+                raise ValueError(f"Mapping is None for task: {task}")
+
             converted_weights_dict = task.mapping.megatron_to_hf(task.param_weight, task.megatron_module)
 
             # All ranks get the full tensor

@@ -61,11 +61,11 @@ class TransformerConfig(MCoreTransformerConfig):
         to compute derived fields based on the current field values. It can be
         called multiple times safely.
         """
-        super().__post_init__()
+        MCoreTransformerConfig.__post_init__(self)
 
 
 @dataclass
-class MLATransformerConfig(MCoreMLATransformerConfig):
+class MLATransformerConfig(TransformerConfig, MCoreMLATransformerConfig):
     """Megatron Core MLATransformerConfig with deferred post-init.
 
     This class inherits from Megatron Core's MLATransformerConfig but defers the
@@ -101,4 +101,4 @@ class MLATransformerConfig(MCoreMLATransformerConfig):
         to compute derived fields based on the current field values. It can be
         called multiple times safely.
         """
-        super().__post_init__()
+        MCoreMLATransformerConfig.__post_init__(self)
