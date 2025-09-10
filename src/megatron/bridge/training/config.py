@@ -837,15 +837,13 @@ class ConfigContainer(Container):
         Calculates dependent values like data_parallel_size and scheduler steps.
         Ensures compatibility between different configuration settings.
         """
-        # Finalize all Bridge configs before running validations
-        if hasattr(self.dataset, "finalize"):
+
+        # For config definitions coming from Megatron Core, run the delayed post-init checks
+        if isinstance(self.dataset, GPTDatasetConfig):
             self.dataset.finalize()
-        if hasattr(self.ddp, "finalize"):
-            self.ddp.finalize()
-        if hasattr(self.optimizer, "finalize"):
-            self.optimizer.finalize()
-        if hasattr(self.model, "finalize"):
-            self.model.finalize()
+        self.ddp.finalize()
+        self.optimizer.finalize()
+        self.model.finalize()
 
         # Re-run post-inits of sub-configs
         for f in fields(self):

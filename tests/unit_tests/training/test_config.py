@@ -17,19 +17,20 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 import torch
-from megatron.core.optimizer import OptimizerConfig
 
 from megatron.bridge.models.gpt_provider import GPTModelProvider
 from megatron.bridge.models.t5_provider import T5ModelProvider
 from megatron.bridge.training.config import (
     CheckpointConfig,
     ConfigContainer,
+    DistributedDataParallelConfig,
     DistributedInitConfig,
     FinetuningDatasetConfig,
     GPTDatasetConfig,
     LoggerConfig,
     MockGPTDatasetConfig,
     NVRxStragglerDetectionConfig,
+    OptimizerConfig,
     ProfilingConfig,
     RerunStateMachineConfig,
     RNGConfig,
@@ -221,8 +222,6 @@ def create_test_config_container(
     else:
         raise ValueError(f"Unsupported model_config type for default dataset_config: {type(model_config)}")
 
-    from megatron.core.distributed import DistributedDataParallelConfig
-
     container = ConfigContainer(
         train=train_config or create_test_training_config(),
         model=model_config,
@@ -262,8 +261,6 @@ def restore_get_world_size_safe(original_func, module_ref):
 
 def create_test_cp_config_container(cp_size, calc_per_token_loss, avg_in_collective, dataset_type="finetuning"):
     """Helper to create config container for context parallel tests."""
-    from megatron.core.distributed import DistributedDataParallelConfig
-
     gpt_model_cfg = create_test_gpt_config(
         seq_length=512,
         context_parallel_size=cp_size,
@@ -301,6 +298,7 @@ class TestMockGPTDatasetConfig:
             reset_attention_mask=False,
             eod_mask_loss=False,
         )
+        config.finalize()
 
         # Should be an instance of both MockGPTDatasetConfig and GPTDatasetConfig
         from megatron.core.datasets.blended_megatron_dataset_config import BlendedMegatronDatasetConfig
@@ -334,7 +332,7 @@ class TestMockGPTDatasetConfig:
                 reset_attention_mask=False,
                 eod_mask_loss=False,
                 blend=(["some", "data", "paths"], None),  # This should fail
-            )
+            ).finalize()
 
         with pytest.raises(TypeError, match="got an unexpected keyword argument 'blend_per_split'"):
             MockGPTDatasetConfig(
@@ -348,7 +346,7 @@ class TestMockGPTDatasetConfig:
                     (["valid", "paths"], None),
                     (["test", "paths"], None),
                 ],  # This should fail
-            )
+            ).finalize()
 
         with pytest.raises(TypeError, match="got an unexpected keyword argument"):
             MockGPTDatasetConfig(
@@ -359,7 +357,7 @@ class TestMockGPTDatasetConfig:
                 eod_mask_loss=False,
                 blend=(["some", "data", "paths"], None),
                 blend_per_split=[(["train", "paths"], None), (["valid", "paths"], None), (["test", "paths"], None)],
-            )
+            ).finalize()
 
 
 class TestConfigContainerValidation:
@@ -921,8 +919,10 @@ class TestConfigContainerValidation:
 
 class TestRerunConfigValidation:
     """
-    Test that any assertions or modifications done by __post_init__() functions
-    are idempotent when the config is unchanged. Tests the same for ConfigContainer.validate().
+    Test that post-init/finalize functions behave correctly when called multiple times:
+    - For configs with finalize(): finalize() may change computed fields on first call, but subsequent calls are idempotent
+    - For non-Bridge configs: __post_init__() should not change state and be idempotent
+    - Tests the same behavior for ConfigContainer.validate().
     """
 
     def _check_post_init_idempotency(self, cfg_init_fn):
@@ -932,9 +932,18 @@ class TestRerunConfigValidation:
         cfg_copy = copy.deepcopy(cfg)
         assert cfg == cfg_copy
 
-        # rerun post-init
-        cfg.__post_init__()
-        assert cfg == cfg_copy
+        # Bridge configs with finalize() may change computed fields on first call
+        if isinstance(cfg, (DistributedDataParallelConfig, OptimizerConfig, GPTDatasetConfig)):
+            cfg.finalize()
+            # For Bridge configs, take a new snapshot after first finalization
+            cfg_after_finalize = copy.deepcopy(cfg)
+            # Second finalize() should be idempotent (no further changes)
+            cfg.finalize()
+            assert cfg == cfg_after_finalize
+        else:
+            # Other config - call __post_init__() which should not change state
+            cfg.__post_init__()
+            assert cfg == cfg_copy
 
     def test_scheduler_config(self):
         self._check_post_init_idempotency(create_test_scheduler_config)
@@ -942,7 +951,7 @@ class TestRerunConfigValidation:
         # Test rerun of post-init with valid and invalid changes
         cfg = create_test_scheduler_config(lr_decay_iters=10)
         cfg.lr_decay_iters = 20
-        cfg.__post_init__()
+        cfg.__post_init__()  # SchedulerConfig is not a Bridge config
 
         with pytest.raises(AssertionError, match="start_weight_decay"):
             cfg.start_weight_decay = -5.2
@@ -957,11 +966,11 @@ class TestRerunConfigValidation:
         # Test rerun of post-init with valid and invalid changes
         cfg = gpt_dataset_seqlen_1024()
         cfg.random_seed = 2468
-        cfg.__post_init__()
+        cfg.finalize()  # GPTDatasetConfig is a Bridge config
 
         with pytest.raises(AssertionError, match="reset_position_ids"):
             cfg.reset_position_ids = None
-            cfg.__post_init__()
+            cfg.finalize()
 
     def test_profiling_config(self):
         self._check_post_init_idempotency(create_test_profiling_config)
