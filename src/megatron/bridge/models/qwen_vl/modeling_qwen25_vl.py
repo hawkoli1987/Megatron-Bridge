@@ -175,9 +175,12 @@ class Qwen25VLModel(MegatronModule):
             image_grid_thw,
             video_grid_thw,
             second_per_grid_ts=second_per_grid_ts,
-            attention_mask=attention_mask,
+            # The "attention_mask" HF expects is a padding mask
+            # We pass in None here because we do not have padding in the input
+            attention_mask=None,
         )
 
+        # TODO(yifu): packed_seq_params
         outputs = self.language_model.forward(
             input_ids=None,
             position_ids=position_ids,
