@@ -1257,3 +1257,151 @@ class TestCheckpointConfig:
             # preserve_fp32_weights should remain at its default
         finally:
             restore_get_world_size_safe(og_ws, cfg_mod)
+
+
+class TestRuntimeConfigUpdate:
+    """Tests for the runtime_config_update function."""
+
+    def test_runtime_config_update_with_mixed_precision_string(self):
+        """Test runtime_config_update with mixed precision as string."""
+        from megatron.bridge.training.config import runtime_config_update
+
+        def patched_init_method():
+            return torch.nn.init.normal_(mean=0.0, std=0.02)
+
+        gpt_cfg = create_test_gpt_config(init_method=patched_init_method, output_layer_init_method=patched_init_method)
+        full_cfg, og_ws, cfg_mod = create_test_config_container(world_size_override=4, model_config=gpt_cfg)
+
+        # Set mixed precision as string
+        full_cfg.mixed_precision = "bf16_mixed"
+
+        try:
+            # Verify initial state
+            assert isinstance(full_cfg.mixed_precision, str)
+            assert not hasattr(full_cfg, "data_parallel_size")
+
+            # Run runtime config update
+            runtime_config_update(full_cfg)
+
+            # Verify results
+            assert not isinstance(full_cfg.mixed_precision, str)  # Should be resolved to config object
+            assert hasattr(full_cfg, "data_parallel_size")
+            assert full_cfg.data_parallel_size == 4  # world_size / model_parallel_size
+            assert full_cfg.model.bf16 is True  # Mixed precision should be applied
+
+        finally:
+            restore_get_world_size_safe(og_ws, cfg_mod)
+
+    def test_runtime_config_update_with_comm_overlap(self):
+        """Test runtime_config_update with communication overlap configuration."""
+        from megatron.bridge.training.comm_overlap import CommOverlapConfig
+        from megatron.bridge.training.setup import runtime_config_update
+
+        def patched_init_method():
+            return torch.nn.init.normal_(mean=0.0, std=0.02)
+
+        gpt_cfg = create_test_gpt_config(init_method=patched_init_method, output_layer_init_method=patched_init_method)
+        full_cfg, og_ws, cfg_mod = create_test_config_container(world_size_override=8, model_config=gpt_cfg)
+
+        full_cfg.comm_overlap = CommOverlapConfig(tp_comm_overlap=False)
+
+        try:
+            # Verify initial state
+            assert not hasattr(full_cfg, "data_parallel_size")
+            assert full_cfg.comm_overlap.data_parallel_size is None  # Field exists but is None
+
+            # Run runtime config update
+            runtime_config_update(full_cfg)
+
+            # Verify results
+            assert hasattr(full_cfg, "data_parallel_size")
+            assert full_cfg.data_parallel_size == 8  # world_size / model_parallel_size
+            assert full_cfg.comm_overlap.data_parallel_size == 8  # Should be set by runtime_config_update
+
+        finally:
+            restore_get_world_size_safe(og_ws, cfg_mod)
+
+    def test_runtime_config_update_finalization(self):
+        """Test that runtime_config_update properly finalizes configs."""
+        from megatron.bridge.training.setup import runtime_config_update
+
+        def patched_init_method():
+            return torch.nn.init.normal_(mean=0.0, std=0.02)
+
+        gpt_cfg = create_test_gpt_config(init_method=patched_init_method, output_layer_init_method=patched_init_method)
+        full_cfg, og_ws, cfg_mod = create_test_config_container(world_size_override=4, model_config=gpt_cfg)
+
+        try:
+            # Verify configs are not finalized initially (for configs that inherit from MCore)
+            if isinstance(full_cfg.dataset, GPTDatasetConfig):
+                # GPTDatasetConfig inherits from MCore, should have deferred post-init
+                assert getattr(full_cfg.dataset, "split", None) is None  # Computed field not set yet
+
+            # Run runtime config update
+            runtime_config_update(full_cfg)
+
+            # Verify configs are finalized
+            if isinstance(full_cfg.dataset, GPTDatasetConfig):
+                # Computed fields should now be set
+                assert getattr(full_cfg.dataset, "split", None) is not None
+
+            # Verify model config is finalized (computed fields set)
+            assert full_cfg.model.num_query_groups is not None
+
+        finally:
+            restore_get_world_size_safe(og_ws, cfg_mod)
+
+    def test_runtime_config_update_no_mixed_precision_or_comm_overlap(self):
+        """Test runtime_config_update with no mixed precision or comm overlap."""
+        from megatron.bridge.training.setup import runtime_config_update
+
+        def patched_init_method():
+            return torch.nn.init.normal_(mean=0.0, std=0.02)
+
+        gpt_cfg = create_test_gpt_config(init_method=patched_init_method, output_layer_init_method=patched_init_method)
+        full_cfg, og_ws, cfg_mod = create_test_config_container(world_size_override=2, model_config=gpt_cfg)
+
+        # Ensure no mixed precision or comm overlap
+        full_cfg.mixed_precision = None
+        full_cfg.comm_overlap = None
+
+        try:
+            # Run runtime config update
+            runtime_config_update(full_cfg)
+
+            # Verify basic functionality works
+            assert hasattr(full_cfg, "data_parallel_size")
+            assert full_cfg.data_parallel_size == 2
+
+        finally:
+            restore_get_world_size_safe(og_ws, cfg_mod)
+
+    def test_runtime_config_update_idempotency(self):
+        """Test that runtime_config_update can be called multiple times safely."""
+        from megatron.bridge.training.setup import runtime_config_update
+
+        def patched_init_method():
+            return torch.nn.init.normal_(mean=0.0, std=0.02)
+
+        gpt_cfg = create_test_gpt_config(init_method=patched_init_method, output_layer_init_method=patched_init_method)
+        full_cfg, og_ws, cfg_mod = create_test_config_container(world_size_override=4, model_config=gpt_cfg)
+
+        try:
+            # Run runtime config update twice
+            runtime_config_update(full_cfg)
+            first_state = {
+                "data_parallel_size": full_cfg.data_parallel_size,
+                "model_num_query_groups": full_cfg.model.num_query_groups,
+            }
+
+            runtime_config_update(full_cfg)
+            second_state = {
+                "data_parallel_size": full_cfg.data_parallel_size,
+                "model_num_query_groups": full_cfg.model.num_query_groups,
+            }
+
+            # Verify idempotency - second call should not change anything
+            assert first_state == second_state
+
+        finally:
+            restore_get_world_size_safe(og_ws, cfg_mod)

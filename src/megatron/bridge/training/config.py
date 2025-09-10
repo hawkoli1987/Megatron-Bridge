@@ -29,7 +29,7 @@ from megatron.bridge.models.mamba.mamba_provider import MambaProvider
 from megatron.bridge.peft.base import PEFT
 from megatron.bridge.training.comm_overlap import CommOverlapConfig
 from megatron.bridge.training.deepep import validate_deepep
-from megatron.bridge.training.mixed_precision import MixedPrecisionConfig
+from megatron.bridge.training.mixed_precision import MixedPrecisionConfig, get_mixed_precision_config
 from megatron.bridge.training.tokenizers.config import TokenizerConfig
 from megatron.bridge.training.utils.config_utils import _ConfigContainerBase as Container
 from megatron.bridge.utils.common_utils import get_world_size_safe, print_rank_0
@@ -831,6 +831,20 @@ class ConfigContainer(Container):
         """
         return world_size // total_model_size
 
+    def set_data_parallel_size(self) -> None:
+        """Calculate and set data_parallel_size for this config and comm_overlap config.
+
+        This method calculates the data parallel size needed by setup methods, without
+        triggering full validation or finalization of Megatron Core configs.
+        """
+        # Calculate data parallel size (needed for comm overlap setup)
+        world_size = get_world_size_safe()
+        self.data_parallel_size = self.get_data_parallel_size(world_size)
+
+        # Set data_parallel_size on comm_overlap config if present
+        if self.comm_overlap is not None:
+            self.comm_overlap.data_parallel_size = self.data_parallel_size
+
     def validate(self) -> None:
         """Performs validation checks on the combined configuration.
 
@@ -851,14 +865,17 @@ class ConfigContainer(Container):
             if hasattr(sub_cfg, "__post_init__"):
                 sub_cfg.__post_init__()
 
-        # Run validations
+        # Distributed - ensure data_parallel_size is calculated (might already be set by set_data_parallel_size)
+        if not hasattr(self, "data_parallel_size") or self.data_parallel_size is None:
+            world_size = get_world_size_safe()
+            self.data_parallel_size = self.get_data_parallel_size(world_size)
+            # Set data_parallel_size on comm_overlap config if present
+            if self.comm_overlap is not None:
+                self.comm_overlap.data_parallel_size = self.data_parallel_size
 
+        # Run validations
         if self.dist.use_megatron_fsdp and self.dist.use_torch_fsdp2:
             raise ValueError("Using use_megatron_fsdp and use_torch_fsdp2 at the same time is not supported.")
-
-        # Distributed
-        world_size = get_world_size_safe()
-        self.data_parallel_size = self.get_data_parallel_size(world_size)
 
         # Megatron FSDP Config checks
         if self.dist.use_megatron_fsdp or self.ddp.use_megatron_fsdp:
@@ -896,10 +913,6 @@ class ConfigContainer(Container):
             assert self.checkpoint.ckpt_format == "torch_dist", (
                 "async_save is only supported with ckpt_format='torch_dist'"
             )
-
-        # Set data_parallel_size on comm_overlap config if present
-        if self.comm_overlap is not None:
-            self.comm_overlap.data_parallel_size = self.data_parallel_size
 
         self.model.use_cpu_initialization = self.model.use_cpu_initialization or self.dist.lazy_init
 
@@ -978,3 +991,36 @@ class ConfigContainer(Container):
 
         # Validate DeepEP is supported for the current GPU architecture
         validate_deepep(self.model)
+
+
+def runtime_config_update(cfg: ConfigContainer) -> None:
+    """Apply runtime configuration updates prior to initialization.
+
+    This function handles all configuration modifications that need to happen
+    after initial config creation but before final validation and model setup.
+
+    Steps:
+    1. Resolve mixed precision configuration from string if needed
+    2. Apply mixed precision settings to model, optimizer, and DDP configs
+    3. Calculate data parallel size (needed for comm overlap)
+    4. Apply communication overlap configuration
+    5. Validate configuration after all modifications (with finalization)
+
+    Args:
+        cfg: Configuration container to update
+    """
+    # Apply mixed precision configuration if provided
+    if cfg.mixed_precision is not None:
+        if isinstance(cfg.mixed_precision, str):
+            cfg.mixed_precision = get_mixed_precision_config(cfg.mixed_precision)
+        cfg.mixed_precision.setup(cfg.model, cfg.optimizer, cfg.ddp)
+
+    # Calculate data parallel size (needed for comm overlap methods)
+    cfg.set_data_parallel_size()
+
+    # Apply communication overlap configuration if provided
+    if cfg.comm_overlap is not None:
+        cfg.comm_overlap.setup(cfg.model, cfg.optimizer, cfg.ddp)
+
+    # Validate configuration after all modifications (with finalization)
+    cfg.validate()
