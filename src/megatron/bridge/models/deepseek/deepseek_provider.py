@@ -146,7 +146,7 @@ class DeepSeekV2LiteProvider(DeepSeekV2Provider):
     hidden_size: int = 2048
     ffn_hidden_size: int = 10944
     num_attention_heads: int = 16
-    kv_channels: int = 128
+    kv_channels: int = 16
     q_lora_rank: int = None
     num_moe_experts: int = 64
     moe_ffn_hidden_size: int = 1408
@@ -200,7 +200,7 @@ class MoonlightProvider(DeepSeekProvider):
     hidden_size: int = 2048
     ffn_hidden_size: int = 11264
     num_attention_heads: int = 16
-    kv_channels: int = 128
+    kv_channels: int = 16
     num_moe_experts: int = 64
     moe_ffn_hidden_size: int = 1408
     moe_shared_expert_intermediate_size: int = 2816  # 1408 * 2 shared expert

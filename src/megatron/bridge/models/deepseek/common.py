@@ -48,11 +48,7 @@ def get_common_configs(hf_pretrained: PreTrainedCausalLM) -> dict:
     configs["hidden_size"] = hf_config.hidden_size
     configs["ffn_hidden_size"] = hf_config.intermediate_size
     configs["num_attention_heads"] = hf_config.num_attention_heads
-    # For MLA, kv_channels should be the non-positional head dimension only
-    # The HF attention output projection uses only the non-positional part
-    configs["kv_channels"] = hf_config.qk_nope_head_dim
-    # Set num_query_groups to the actual number of KV heads for grouped query attention
-    configs["num_query_groups"] = hf_config.num_key_value_heads
+    configs["kv_channels"] = hf_config.num_key_value_heads
     configs["q_lora_rank"] = hf_config.q_lora_rank
     configs["num_moe_experts"] = hf_config.n_routed_experts
     configs["moe_ffn_hidden_size"] = hf_config.moe_intermediate_size
