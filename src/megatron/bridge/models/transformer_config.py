@@ -26,7 +26,7 @@ from megatron.core.transformer.transformer_config import TransformerConfig as MC
 
 @dataclass
 class TransformerConfig(MCoreTransformerConfig):
-    """Bridge wrapper for TransformerConfig with deferred post-init.
+    """Megatron Core TransformerConfig with deferred post-init.
 
     This class inherits from Megatron Core's TransformerConfig but defers the
     execution of post_init() until finalize() is explicitly called. This allows
@@ -66,7 +66,7 @@ class TransformerConfig(MCoreTransformerConfig):
 
 @dataclass
 class MLATransformerConfig(MCoreMLATransformerConfig):
-    """Bridge wrapper for MLATransformerConfig with deferred post-init.
+    """Megatron Core MLATransformerConfig with deferred post-init.
 
     This class inherits from Megatron Core's MLATransformerConfig but defers the
     execution of post_init() until finalize() is explicitly called. This allows

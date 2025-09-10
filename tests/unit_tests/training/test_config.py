@@ -920,8 +920,8 @@ class TestConfigContainerValidation:
 class TestRerunConfigValidation:
     """
     Test that post-init/finalize functions behave correctly when called multiple times:
-    - For configs with finalize(): finalize() may change computed fields on first call, but subsequent calls are idempotent
-    - For non-Bridge configs: __post_init__() should not change state and be idempotent
+    - For configs inheriting from Megatron Core: finalize() may change computed fields on first call, but subsequent calls are idempotent
+    - For pure Megatron-Bridge configs: __post_init__() should not change state and be idempotent
     - Tests the same behavior for ConfigContainer.validate().
     """
 
@@ -932,16 +932,16 @@ class TestRerunConfigValidation:
         cfg_copy = copy.deepcopy(cfg)
         assert cfg == cfg_copy
 
-        # Bridge configs with finalize() may change computed fields on first call
+        # Configs inheriting from Megatron Core have deferred post-init with finalize()
         if isinstance(cfg, (DistributedDataParallelConfig, OptimizerConfig, GPTDatasetConfig)):
             cfg.finalize()
-            # For Bridge configs, take a new snapshot after first finalization
+            # For MCore configs, take a new snapshot after first finalization
             cfg_after_finalize = copy.deepcopy(cfg)
             # Second finalize() should be idempotent (no further changes)
             cfg.finalize()
             assert cfg == cfg_after_finalize
         else:
-            # Other config - call __post_init__() which should not change state
+            # Other configs call __post_init__() which should not change state
             cfg.__post_init__()
             assert cfg == cfg_copy
 
@@ -951,7 +951,7 @@ class TestRerunConfigValidation:
         # Test rerun of post-init with valid and invalid changes
         cfg = create_test_scheduler_config(lr_decay_iters=10)
         cfg.lr_decay_iters = 20
-        cfg.__post_init__()  # SchedulerConfig is not a Bridge config
+        cfg.__post_init__()
 
         with pytest.raises(AssertionError, match="start_weight_decay"):
             cfg.start_weight_decay = -5.2
@@ -966,7 +966,7 @@ class TestRerunConfigValidation:
         # Test rerun of post-init with valid and invalid changes
         cfg = gpt_dataset_seqlen_1024()
         cfg.random_seed = 2468
-        cfg.finalize()  # GPTDatasetConfig is a Bridge config
+        cfg.finalize()
 
         with pytest.raises(AssertionError, match="reset_position_ids"):
             cfg.reset_position_ids = None

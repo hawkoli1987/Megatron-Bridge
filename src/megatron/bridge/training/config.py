@@ -37,7 +37,7 @@ from megatron.bridge.utils.common_utils import get_world_size_safe, print_rank_0
 
 @dataclass
 class DistributedDataParallelConfig(MCoreDistributedDataParallelConfig):
-    """Wrapper for DistributedDataParallelConfig with deferred post-init.
+    """Megatron Core DistributedDataParallelConfig with deferred post-init.
 
     This class inherits from Megatron Core's DistributedDataParallelConfig but defers the
     execution of post_init() until finalize() is explicitly called. This allows
@@ -62,7 +62,7 @@ class DistributedDataParallelConfig(MCoreDistributedDataParallelConfig):
 
 @dataclass
 class OptimizerConfig(MCoreOptimizerConfig):
-    """Wrapper for OptimizerConfig with deferred post-init.
+    """Megatron Core OptimizerConfig with deferred post-init.
 
     This class inherits from Megatron Core's OptimizerConfig but defers the
     execution of post_init() until finalize() is explicitly called. This allows
@@ -222,7 +222,7 @@ class DataloaderConfig:
 
 @dataclass
 class GPTDatasetConfig(MCoreGPTDatasetConfig, DataloaderConfig):
-    """Wrapper for GPT datasets with deferred post-init.
+    """Megatron Core GPTDatasetConfig with deferred post-init.
 
     This class inherits from MCore's GPTDatasetConfig and DataloaderConfig but defers the
     execution of post_init() until finalize() is explicitly called. This allows
