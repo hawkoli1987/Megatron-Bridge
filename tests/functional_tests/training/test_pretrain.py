@@ -22,7 +22,6 @@ from megatron.bridge.training.config import (
     CheckpointConfig,
     ConfigContainer,
     DistributedDataParallelConfig,
-    DistributedInitConfig,
     LoggerConfig,
     MockGPTDatasetConfig,
     OptimizerConfig,
