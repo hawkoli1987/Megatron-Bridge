@@ -180,7 +180,6 @@ class Qwen25VLModel(MegatronModule):
             attention_mask=None,
         )
 
-        # TODO(yifu): packed_seq_params
         outputs = self.language_model.forward(
             input_ids=None,
             position_ids=position_ids,
@@ -189,6 +188,7 @@ class Qwen25VLModel(MegatronModule):
             labels=labels,
             loss_mask=loss_mask,
             runtime_gather_output=runtime_gather_output,
+            packed_seq_params=packed_seq_params,
         )
         return outputs
 
