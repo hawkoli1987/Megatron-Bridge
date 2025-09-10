@@ -1,28 +1,46 @@
-# Checkpointing
+# Checkpointing Configuration
 
 The `CheckpointConfig` controls model checkpointing behavior, including saving and loading checkpoints, checkpoint formats, and various optimization features.
 
 ## Overview
 
-Megatron-Bridge uses Megatron Core's distributed checkpointing system, which is designed for large-scale training across multiple GPUs and nodes. The distributed checkpoint approach saves the state of a distributed training job by sharding checkpoint data across multiple files, reducing memory overhead and improving GPU utilization during save/load operations.
+Megatron Bridge uses Megatron Core's distributed checkpointing system, which is designed for large-scale training across multiple GPUs and nodes. The distributed checkpoint approach saves the state of a distributed training job by sharding checkpoint data across multiple files, reducing memory overhead and improving GPU utilization during save and load operations.
 
-### Distributed Checkpointing Benefits
+## Distributed Checkpointing Benefits
 
-**Memory Efficiency**: Instead of gathering all model parameters and optimizer states on a single rank, distributed checkpointing saves data directly from each rank, significantly reducing memory requirements during checkpointing.
+Distributed checkpointing introduces a robust and scalable approach to model training, offering key advantages in memory efficiency, parallelism flexibility, and performance optimization across diverse hardware configurations.
 
-**Parallelism Flexibility**: The system provides flexibility to resume training using different parallelism strategies. You can change tensor parallelism, pipeline parallelism, or data parallelism sizes between checkpoint save and load operations.
+### Memory Efficiency
+Distributed checkpointing avoids centralizing all model parameters and optimizer states on a single rank. Instead, each rank saves its own data, significantly reducing memory requirements during checkpointing.
 
-**Scalability**: Handles all types of parallelism including:
-- **Data Parallelism (DP)**: Replicates the model across multiple GPUs with different data batches
-- **Tensor Parallelism (TP)**: Distributes individual layer parameters across GPUs  
-- **Pipeline Parallelism (PP)**: Assigns consecutive layers to different GPUs
-- **Context Parallelism (CP)**: Shards tensors along the sequence dimension for long sequences
-- **Expert Parallelism (EP)**: Distributes MoE expert weights across GPUs
+### Parallelism Flexibility
+Training can be resumed with different parallelism strategies. You can adjust:
+- Tensor Parallelism
+- Pipeline Parallelism
+- Data Parallelism
 
-**Performance**: The distributed optimizer shards optimizer states and master parameters across data-parallel ranks instead of replicating them, reducing memory usage and communication overhead.
+This flexibility allows seamless transitions between checkpoint save and load operations.
+
+### Scalability
+Distributed checkpointing supports a wide range of parallelism types:
+
+| Parallelism Type       | Description                                                                 |
+|------------------------|-----------------------------------------------------------------------------|
+| Data Parallelism (DP)     | Replicates the model across multiple GPUs with different data batches       |
+| Tensor Parallelism (TP)   | Distributes individual layer parameters across GPUs                         |
+| Pipeline Parallelism (PP) | Assigns consecutive layers to different GPUs                                |
+| Context Parallelism (CP)  | Shards tensors along the sequence dimension for long sequences              |
+| Expert Parallelism (EP)   | Distributes Mixture-of-Experts (MoE) weights across GPUs                    |
+
+### Performance
+The distributed optimizer shards both optimizer states and master parameters across data-parallel ranks. This approach:
+- Reduces memory usage
+- Minimizes communication overhead
+- Enhances training efficiency
 
 
 ## Save Configuration
+Parameters to control how checkpoints are saved.
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
@@ -31,15 +49,17 @@ Megatron-Bridge uses Megatron Core's distributed checkpointing system, which is 
 | `save_optim` | `bool` | `True` | Whether to save optimizer state |
 | `save_rng` | `bool` | `True` | Whether to save random number generator state |
 
-### Asynchronous Saving
+## Asynchronous Saving
 
 Asynchronous saving allows training to continue while checkpoint data is persisted to disk in the background, reducing the impact of checkpointing on training throughput.
+Parameter for asynchronous checkpoint saving.
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `async_save` | `bool` | `False` | Enable asynchronous checkpoint saving (requires `torch_dist` format) |
 
 ## Load Configuration
+Parameters to control how checkpoints are loaded.
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
@@ -51,32 +71,39 @@ Asynchronous saving allows training to continue while checkpoint data is persist
 | `exit_on_missing_checkpoint` | `bool` | `False` | Exit if specified checkpoint is not found instead of random initialization |
 | `dist_ckpt_strictness` | `Literal[...]` | `"assume_ok_unexpected"` | Handling of key mismatches during distributed checkpoint load |
 
-### Checkpoint Loading Strictness
+## Checkpoint Loading Strictness
 
-When loading distributed checkpoints, there may be mismatches between the keys in the saved checkpoint and what the current model expects. This can happen when resuming training with different parallelism settings, model configurations, or software versions. The `dist_ckpt_strictness` parameter controls how these mismatches are handled:
+When loading distributed checkpoints, key mismatches can occur between the saved checkpoint and the current model. These discrepancies often arise when resuming training with different parallelism settings, model architectures, or software versions. The `dist_ckpt_strictness` parameter determines how strictly these mismatches are handled.
 
-- **`assume_ok_unexpected`**: Assume unexpected keys are acceptable (default, most permissive)
-- **`log_unexpected`**: Log unexpected keys but continue loading
-- **`log_all`**: Log all key mismatches for debugging
-- **`raise_unexpected`**: Raise error on unexpected keys (stricter validation)
-- **`raise_all`**: Raise error on any key mismatch (strictest validation)
-- **`return_unexpected`**: Return information about unexpected keys
-- **`return_all`**: Return information about all key mismatches
-- **`ignore_all`**: Ignore all key mismatches completely
 
-## Fine-tuning Configuration
+| Parameter              | Description                                                       |
+|------------------------|-------------------------------------------------------------------|
+| `assume_ok_unexpected` | Assume unexpected keys are acceptable (default, most permissive)  |
+| `log_unexpected`       | Log unexpected keys but continue loading                          |
+| `log_all`              | Log all key mismatches for debugging                              |
+| `raise_unexpected`     | Raise error on unexpected keys (stricter validation)              |
+| `raise_all`            | Raise error on any key mismatch (strictest validation)            |
+| `return_unexpected`    | Return information about unexpected keys                          |
+| `return_all`           | Return information about all key mismatches                       |
+| `ignore_all`           | Ignore all key mismatches completely                              |
+
+
+## Fine-Tuning Configuration
+Parameter for fine-tuning from a pretrained checkpoint.
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `pretrained_checkpoint` | `Optional[str]` | `None` | Directory containing pretrained model checkpoint for fine-tuning |
 
 ## Checkpoint Format
+Parameter for selecting the checkpoint format.
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `ckpt_format` | `Literal["torch_dist"]` | `"torch_dist"` | Checkpoint format (PyTorch distributed checkpoint format) |
 
 ## Performance Optimizations
+Parameters to optimize checkpoint save and load performance.
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
@@ -87,7 +114,7 @@ When loading distributed checkpoints, there may be mismatches between the keys i
 
 ## Checkpoint Format on Disk
 
-When using the `torch_dist` checkpoint format, Megatron-Bridge creates checkpoints with the following directory structure:
+When using the `torch_dist` checkpoint format, Megatron Bridge creates checkpoints with the following directory structure:
 
 ```
 checkpoint_dir/
@@ -110,12 +137,15 @@ checkpoint_dir/
 │   │   └── ...                              # One file per DP rank
 ```
 
-The checkpoint includes:
-- **Model parameters and optimizer states** distributed across `.distcp` files
-- **Training state** with iteration count, consumed samples, learning rate scheduler state
-- **Configuration** as a serialized YAML file (`run_config.yaml`) containing the complete `ConfigContainer`
-- **Dataloader states** to ensure deterministic data iteration resumption
-- **Metadata** for checkpoint validation and loading
+## Checkpoint Contents
+
+The checkpoint includes the following components:
+
+- **Model parameters and optimizer states**: Stored across `.distcp` files to support distributed training.
+- **Training state**: Captures the current iteration count, number of consumed samples, and the state of the learning rate scheduler.
+- **Configuration**: Serialized as a YAML file (`run_config.yaml`) containing the complete `ConfigContainer`.
+- **Dataloader states**: Ensures deterministic resumption of data iteration.
+- **Metadata**: Used for validating and correctly loading the checkpoint.
 
 ## Local Checkpointing
 
@@ -123,17 +153,14 @@ Local checkpointing saves model checkpoints directly to storage on each node (e.
 
 Local checkpointing leverages the [NVIDIA Resiliency Extension](https://nvidia.github.io/nvidia-resiliency-ext/checkpointing/local/index.html) and provides several key features:
 
-**Local Saving**: Each node saves its part of the checkpoint locally, reducing network I/O and improving save performance.
-
-**Synchronous and Asynchronous Support**: Saving can happen synchronously or asynchronously, mirroring the configuration used for global checkpoints.
-
-**Automatic Cleanup**: Handles the removal of outdated or incomplete local checkpoints automatically.
-
-**Optional Replication**: For multi-node jobs, checkpoints are replicated to other nodes to allow recovery even if a node fails after saving. Single-node jobs do not use replication.
-
-**Automated Loading**: When resuming, the framework automatically finds the latest valid checkpoint, comparing local and global checkpoints, and retrieves any needed parts across nodes.
+- **Local Saving**: Each node saves its part of the checkpoint locally, reducing network I/O and improving save performance.
+- **Synchronous and Asynchronous Support**: Saving can happen synchronously or asynchronously, mirroring the configuration used for global checkpoints.
+- **Automatic Cleanup**: Handles the removal of outdated or incomplete local checkpoints automatically.
+- **Optional Replication**: For multi-node jobs, checkpoints are replicated to other nodes to allow recovery even if a node fails after saving. Single-node jobs do not use replication.
+- **Automated Loading**: When resuming, the framework automatically finds the latest valid checkpoint, comparing local and global checkpoints, and retrieves any needed parts across nodes.
 
 ### Non-Persistent Checkpointing Configuration
+Parameters for non-persistent checkpointing.
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
@@ -143,7 +170,8 @@ Local checkpointing leverages the [NVIDIA Resiliency Extension](https://nvidia.g
 | `non_persistent_local_ckpt_dir` | `Optional[str]` | `None` | Directory for local non-persistent checkpoints |
 | `non_persistent_local_ckpt_algo` | `Literal["fully_parallel", "atomic"]` | `"fully_parallel"` | Algorithm for local non-persistent checkpointing |
 
-### Replication & Fault Tolerance
+### Replication and Fault Tolerance
+Parameters for replication and fault tolerance of local checkpoints.
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|

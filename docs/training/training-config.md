@@ -3,8 +3,9 @@
 The `TrainingConfig` contains settings related to the training loop bounds, exit conditions, validation, batch sizing, and memory management.
 
 ## Key Parameters
-
+Configure these parameters to control core training behavior, resource utilization, and monitoring across distributed setups.
 ### Batch Configuration
+Define how data is batched and distributed across devices during training.
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
@@ -19,6 +20,7 @@ The relationship between batch sizes:
 
 ### Training Duration
 
+Control when training stops using iteration counts or time-based limits.
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `train_iters` | `Optional[int]` | `None` | Total number of iterations to train |
@@ -26,6 +28,7 @@ The relationship between batch sizes:
 | `exit_duration_in_mins` | `Optional[int]` | `None` | Exit after this many minutes |
 
 ### Validation
+Configure validation frequency, duration, and evaluation-only modes.
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
@@ -38,6 +41,7 @@ The relationship between batch sizes:
 - Set `eval_interval` to `None` to skip validation during training, but still run validation after training completes.
 
 ### Memory Management
+Control GPU memory cleanup and garbage collection to prevent memory issues during training.
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
@@ -46,7 +50,8 @@ The relationship between batch sizes:
 | `manual_gc_interval` | `int` | `0` | Training step interval for manual garbage collection (0=disabled) |
 | `manual_gc_eval` | `bool` | `True` | Enable garbage collection during evaluation when using manual GC |
 
-### Signal Handling & Exit Conditions
+### Signal Handling and Exit Conditions
+Set up automatic checkpoint saving and clean exit procedures for signal-based interruptions.
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
@@ -55,6 +60,7 @@ The relationship between batch sizes:
 | `exit_signal_handler_for_dataloader` | `bool` | `False` | Use signal handler for dataloader workers |
 
 ### Performance Monitoring
+Monitor training consistency and synchronization across distributed processes.
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|

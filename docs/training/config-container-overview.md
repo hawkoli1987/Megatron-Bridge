@@ -1,8 +1,8 @@
-# Configuration Overview
+# ConfigContainer Overview
 
-The `ConfigContainer` is the central configuration object in Megatron-Bridge that orchestrates all aspects of training. It acts as a single source of truth that brings together model architecture, training parameters, data loading, optimization, checkpointing, logging, and distributed training settings.
+The `ConfigContainer` is the central configuration object in Megatron Bridge that orchestrates all aspects of training. It acts as a single source of truth that brings together model architecture, training parameters, data loading, optimization, checkpointing, logging, and distributed training settings.
 
-## What is ConfigContainer?
+## What is ConfigContainer
 
 `ConfigContainer` is a dataclass that holds all the configuration objects needed for training:
 
@@ -32,11 +32,11 @@ config = ConfigContainer(
 
 ## Configuration Attributes
 
-The `ConfigContainer` contains the following configuration attributes:
+The `ConfigContainer` organizes training settings into three categories—**required**, **default**, and **optional** each controlling a specific aspect of model setup, execution, and advanced features.
 
 ### Required Attributes
 
-These configuration attributes must be provided when creating a `ConfigContainer`:
+The following configuration attributes must be provided when creating a `ConfigContainer`:
 
 | Attribute | Purpose |
 |-----------|---------|
@@ -51,7 +51,8 @@ These configuration attributes must be provided when creating a `ConfigContainer
 
 ### Default Attributes
 
-These configuration attributes have sensible defaults but can be customized:
+These attributes have predefined defaults, but can be customized to suit specific training needs:
+
 
 | Attribute | Purpose |
 |-----------|---------|
@@ -62,7 +63,7 @@ These configuration attributes have sensible defaults but can be customized:
 
 ### Optional Attributes
 
-These configuration attributes are `None` by default and enable specific features when set:
+These configuration attributes are set to `None` by default and enable specific features when configured:
 
 | Attribute | Purpose |
 |-----------|---------|
@@ -76,24 +77,29 @@ These configuration attributes are `None` by default and enable specific feature
 
 ## Megatron Core Integration
 
-Several configuration objects come directly from Megatron Core:
+Several configuration components in `ConfigContainer` are directly derived from Megatron Core, ensuring compatibility with its optimization and data parallel frameworks:
 
-- **`optimizer`**: Uses `OptimizerConfig` from Megatron Core for optimization settings
-- **`ddp`**: Uses `DistributedDataParallelConfig` from Megatron Core for data parallel configuration
+| Configuration | Purpose |
+|---------------|---------|
+| `optimizer`   | Uses `OptimizerConfig` from Megatron Core for optimization settings |
+| `ddp`         | Uses `DistributedDataParallelConfig` from Megatron Core for data parallel configuration |
+
+
 
 These configurations provide seamless integration with the Megatron Core library.
 
 ## Automatic Configuration Processing
 
-When training begins, the framework automatically handles configuration processing:
+At the start of training, Megatron Bridge automatically validates, adjusts, and resolves configuration settings to ensure consistency and optimal runtime behavior:
 
-1. **Validation**: All configurations are validated for consistency and compatibility
-2. **Runtime Overrides**: Mixed precision and communication overlap configs apply runtime overrides based on environment variables and device-specific checks
-3. **Dependency Resolution**: Dependent values (like data parallel size, scheduler steps) are calculated automatically
+1. **Validation**: All configurations are validated for consistency and compatibility.
+2. **Runtime Overrides**: Mixed precision and communication overlap configurations apply runtime overrides based on environment variables and device-specific checks.
+3. **Dependency Resolution**: Dependent values (like data parallel size and scheduler steps) are calculated automatically.
 
-Users do not need to manually validate configurations - this happens automatically at the start of training.
+You do not need to manually validate configurations - this process occurs automatically at the start of training.
 
 ## Configuration Export and Import
+The `ConfigContainer` supports serialization to and from YAML, allowing configurations to be saved, shared, and reloaded across training sessions.
 
 ### Export to YAML
 ```python
