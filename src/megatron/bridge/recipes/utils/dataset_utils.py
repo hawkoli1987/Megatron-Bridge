@@ -14,6 +14,7 @@
 
 from typing import List, Optional, Tuple
 
+# return tuple of (blend=None, blend_per_split) if we do offline split
 from megatron.bridge.data.loaders import get_blend_and_blend_per_split
 
 
@@ -72,6 +73,7 @@ def get_blend_fields_from_data_paths(
             per_split_data_args_path=per_split_data_args_path,
         )
 
+        # NOTE: actually used
         if blend_per_split is not None:
             # When using blend_per_split, split should be None
             split = None
@@ -82,4 +84,7 @@ def get_blend_fields_from_data_paths(
             # No data provided, fall back to mock mode
             split = "1,1,1"
 
+    # NOTE: we use offline split, so blend and split should be None, 
+    # blend per split should be a list of 3, each is a tuple of (list of dataset prefixes, Union[list of dataset weights, None])
+    # the 2nd (val) and/or 3rd (test) list can be None as well
     return blend, blend_per_split, split
