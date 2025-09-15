@@ -17,6 +17,8 @@ from typing import Any, Callable, Iterable, Iterator, Optional, Union
 
 import torch
 from megatron.core import mpu
+# The blend, consisting of a list of dataset prefixes and optionally a list of dataset weights, 
+# e.g. [["path/to/dataset_1_prefix", "path/to/dataset_2_prefix"], [30.0, 70.0]].
 from megatron.core.datasets.utils import get_blend_from_list
 from megatron.core.rerun_state_machine import RerunDataIterator
 from torch.utils.data import DataLoader
@@ -64,6 +66,7 @@ def get_blend_and_blend_per_split(
 
     blend = None
     blend_per_split = None
+    # IGNORE: use external blend info file
     if use_data_path:
         if data_args_path is not None:
             assert data_paths is None
@@ -73,6 +76,7 @@ def get_blend_and_blend_per_split(
             assert data_paths is not None
             blend = get_blend_from_list(data_paths)
     elif use_per_split_data_path:
+        # IGNORE: another way of external blend info containing both the paths and weights
         if per_split_data_args_path is not None:
             with open(per_split_data_args_path, "r") as f:
                 per_split_data_args = json.load(f)
@@ -87,8 +91,13 @@ def get_blend_and_blend_per_split(
                     get_blend_from_list(per_split_data_args["valid"]),
                     get_blend_from_list(per_split_data_args["test"]),
                 ]
+        # NOTE: actually used, 
         else:
             blend_per_split = [
+                # get_blend_from_list()
+                # the input is a list of flattened dataset weights and prefixes, e.g. [0.5, "/path/to/train1", 0.5, "/path/to/train2"]
+                # or the weights can be omitted, e.g. ["/path/to/train1", "/path/to/train2"]
+                # the output is a tuple of (list of dataset prefixes, list of dataset weights)
                 get_blend_from_list(train_data_paths),
                 get_blend_from_list(valid_data_paths),
                 get_blend_from_list(test_data_paths),
@@ -96,6 +105,7 @@ def get_blend_and_blend_per_split(
     else:
         blend, blend_per_split = None, None
 
+    # NOTE: blend should be None if dataset is split offline
     return blend, blend_per_split
 
 
