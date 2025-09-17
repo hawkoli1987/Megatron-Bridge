@@ -164,7 +164,7 @@ def build_train_valid_test_datasets(
 
 def build_train_valid_test_data_loaders(
     cfg: ConfigContainer, train_state: TrainState, build_train_valid_test_datasets_provider: Callable
-) -> tuple[Optional[DataLoader], Optional[DataLoader], Optional[DataLoader]]:
+) -> tuple[Optional[DataLoader], Union[Optional[DataLoader], list[Optional[DataLoader]]], Optional[DataLoader]]:
     """Build train, validation, and test data loaders.
 
     First builds the datasets using the provided provider function, then constructs
@@ -177,6 +177,7 @@ def build_train_valid_test_data_loaders(
 
     Returns:
         A tuple (train_dataloader, valid_dataloader, test_dataloader).
+        When multiple_validation_sets is True, valid_dataloader will be a list of DataLoaders.
     """
     (train_dataloader, valid_dataloader, test_dataloader) = (None, None, None)
 
@@ -210,40 +211,80 @@ def build_train_valid_test_data_loaders(
         data_parallel_rank=mpu.get_data_parallel_rank(),
         data_parallel_size=mpu.get_data_parallel_world_size(),
     )
-    # offline evaluation
-    if cfg.train.skip_train:
-        valid_dataloader = build_pretraining_data_loader(
-            valid_ds,
-            0,
-            cfg.dataset.dataloader_type,
-            cfg.train.micro_batch_size,
-            cfg.dataset.num_workers,
-            cfg.dataset.data_sharding,
-            worker_init_fn=maybe_worker_init_fn,
-            collate_fn=valid_ds.collate_fn if hasattr(valid_ds, "collate_fn") else None,
-            pin_memory=cfg.dataset.pin_memory,
-            persistent_workers=cfg.dataset.persistent_workers,
-            data_parallel_rank=mpu.get_data_parallel_rank(),
-            data_parallel_size=mpu.get_data_parallel_world_size(),
-        )
+    
+    # Handle multiple validation datasets
+    if hasattr(cfg.dataset, 'multiple_validation_sets') and cfg.dataset.multiple_validation_sets and isinstance(valid_ds, list):
+        # Multiple validation datasets - create a list of dataloaders
+        valid_dataloader = []
+        for i, valid_dataset in enumerate(valid_ds):
+            if valid_dataset is not None:
+                if cfg.train.skip_train:
+                    valid_dl = build_pretraining_data_loader(
+                        valid_dataset,
+                        0,
+                        cfg.dataset.dataloader_type,
+                        cfg.train.micro_batch_size,
+                        cfg.dataset.num_workers,
+                        cfg.dataset.data_sharding,
+                        worker_init_fn=maybe_worker_init_fn,
+                        collate_fn=valid_dataset.collate_fn if hasattr(valid_dataset, "collate_fn") else None,
+                        pin_memory=cfg.dataset.pin_memory,
+                        persistent_workers=cfg.dataset.persistent_workers,
+                        data_parallel_rank=mpu.get_data_parallel_rank(),
+                        data_parallel_size=mpu.get_data_parallel_world_size(),
+                    )
+                else:
+                    valid_dl = build_pretraining_data_loader(
+                        valid_dataset,
+                        train_state.consumed_valid_samples,
+                        "cyclic",
+                        cfg.train.micro_batch_size,
+                        cfg.dataset.num_workers,
+                        cfg.dataset.data_sharding,
+                        worker_init_fn=maybe_worker_init_fn,
+                        collate_fn=valid_dataset.collate_fn if hasattr(valid_dataset, "collate_fn") else None,
+                        pin_memory=cfg.dataset.pin_memory,
+                        persistent_workers=cfg.dataset.persistent_workers,
+                        data_parallel_rank=mpu.get_data_parallel_rank(),
+                        data_parallel_size=mpu.get_data_parallel_world_size(),
+                    )
+                valid_dataloader.append(valid_dl)
+            else:
+                valid_dataloader.append(None)
     else:
-        # online evaluation
-        # TODO: if multiple_validation_datasets is True, the valid_dataloader will be a list of
-        # DataLoaders, built from the respective val_dataset from valid_ds list
-        valid_dataloader = build_pretraining_data_loader(
-            valid_ds,
-            train_state.consumed_valid_samples,
-            "cyclic",
-            cfg.train.micro_batch_size,
-            cfg.dataset.num_workers,
-            cfg.dataset.data_sharding,
-            worker_init_fn=maybe_worker_init_fn,
-            collate_fn=valid_ds.collate_fn if hasattr(valid_ds, "collate_fn") else None,
-            pin_memory=cfg.dataset.pin_memory,
-            persistent_workers=cfg.dataset.persistent_workers,
-            data_parallel_rank=mpu.get_data_parallel_rank(),
-            data_parallel_size=mpu.get_data_parallel_world_size(),
-        )
+        # Single validation dataset - original logic
+        # offline evaluation
+        if cfg.train.skip_train:
+            valid_dataloader = build_pretraining_data_loader(
+                valid_ds,
+                0,
+                cfg.dataset.dataloader_type,
+                cfg.train.micro_batch_size,
+                cfg.dataset.num_workers,
+                cfg.dataset.data_sharding,
+                worker_init_fn=maybe_worker_init_fn,
+                collate_fn=valid_ds.collate_fn if hasattr(valid_ds, "collate_fn") else None,
+                pin_memory=cfg.dataset.pin_memory,
+                persistent_workers=cfg.dataset.persistent_workers,
+                data_parallel_rank=mpu.get_data_parallel_rank(),
+                data_parallel_size=mpu.get_data_parallel_world_size(),
+            )
+        else:
+            # online evaluation
+            valid_dataloader = build_pretraining_data_loader(
+                valid_ds,
+                train_state.consumed_valid_samples,
+                "cyclic",
+                cfg.train.micro_batch_size,
+                cfg.dataset.num_workers,
+                cfg.dataset.data_sharding,
+                worker_init_fn=maybe_worker_init_fn,
+                collate_fn=valid_ds.collate_fn if hasattr(valid_ds, "collate_fn") else None,
+                pin_memory=cfg.dataset.pin_memory,
+                persistent_workers=cfg.dataset.persistent_workers,
+                data_parallel_rank=mpu.get_data_parallel_rank(),
+                data_parallel_size=mpu.get_data_parallel_world_size(),
+            )
     test_dataloader = build_pretraining_data_loader(
         test_ds,
         0,
@@ -276,7 +317,7 @@ def build_train_valid_test_data_loaders(
 
 def build_train_valid_test_data_iterators(
     cfg: ConfigContainer, train_state: TrainState, build_train_valid_test_datasets_provider: Callable
-) -> tuple[Optional[RerunDataIterator], Optional[RerunDataIterator], Optional[RerunDataIterator]]:
+) -> tuple[Optional[RerunDataIterator], Union[Optional[RerunDataIterator], list[Optional[RerunDataIterator]]], Optional[RerunDataIterator]]:
     """Build train, validation, and test data iterators.
 
     Builds the data loaders first, then wraps them in appropriate iterators
@@ -289,10 +330,12 @@ def build_train_valid_test_data_iterators(
 
     Returns:
         A tuple (train_data_iterator, valid_data_iterator, test_data_iterator).
+        When multiple_validation_sets is True, valid_data_iterator will be a list of iterators.
+        
         Example batch from Megatron Blended Dataset = next(xx_data_iterator) 
         batch = {
             "tokens": torch.tensor([[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]]),  # Shape: [batch_size, seq_length]
-            "labels": torch.tensor([[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]]),  # Shape: [batch_size, seq_length] 
+            "labels": torch.tensor([[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]]),  # Shape: [batch_size, seq_length]
             "loss_mask": torch.tensor([[1, 1, 1, 1, 1, 1, 1, 1, 1, 1]]), # Shape: [batch_size, seq_length]
             "attention_mask": torch.tensor([[1, 1, 1, 1, 1, 1, 1, 1, 1, 1]]), # Shape: [batch_size, seq_length]
             "position_ids": torch.tensor([[0, 1, 2, 3, 4, 5, 6, 7, 8, 9]]), # Shape: [batch_size, seq_length]
@@ -335,9 +378,17 @@ def build_train_valid_test_data_iterators(
         train_data_iterator = None
 
     if valid_dataloader is not None:
-        # TODO:if multiple_validation_datasets is True, the valid_data_iterator will be a list of
-        # iterators, built from the respective val_dataset from valid_ds list
-        valid_data_iterator = _get_iterator("cyclic", valid_dataloader)
+        if isinstance(valid_dataloader, list):
+            # Multiple validation datasets - create a list of iterators
+            valid_data_iterator = []
+            for valid_dl in valid_dataloader:
+                if valid_dl is not None:
+                    valid_data_iterator.append(_get_iterator("cyclic", valid_dl))
+                else:
+                    valid_data_iterator.append(None)
+        else:
+            # Single validation dataset - original logic
+            valid_data_iterator = _get_iterator("cyclic", valid_dataloader)
     else:
         valid_data_iterator = None
 
