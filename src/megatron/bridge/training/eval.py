@@ -58,6 +58,7 @@ def evaluate(
             - collected_non_loss_data: Data collected by non_loss_data_func.
             - timelimit_hit: Boolean indicating if the time limit was reached.
     """
+    Timelimit_hit = False
     # Check num args to forward_step_func
     num_fw_args = check_forward_step_func_num_args(forward_step_func)
 
@@ -141,7 +142,8 @@ def evaluate(
                 if done:
                     rerun_state_machine.set_mode(rerun_mode)
                     print_rank_0("Exiting during evaluation, timelimit reached")
-                    return None, None, True
+                    timelimit_hit = True
+                    break
 
         collected_non_loss_data = None
         if non_loss_data_func is not None:
@@ -162,17 +164,23 @@ def evaluate(
     for model_module in model:
         model_module.train()
 
-    for key in total_loss_dict:
-        numerator, denominator = total_loss_dict[key]
-        total_loss_dict[key] = numerator / denominator
+    # Partial aggregation: only if we have some completed iterations
+    if total_loss_dict:
+        for key in total_loss_dict:
+            numerator, denominator = total_loss_dict[key]
+            total_loss_dict[key] = numerator / denominator
+        result_loss_dict = total_loss_dict
+        result_non_loss_data = collected_non_loss_data
+    else:
+        # No iterations completed
+        result_loss_dict = None
+        result_non_loss_data = None
 
     timers("evaluate").stop()
     timers.log(["evaluate"])
-
     rerun_state_machine.set_mode(rerun_mode)
-
-    return total_loss_dict, collected_non_loss_data, False
-
+        
+    return total_loss_dict, collected_non_loss_data, timelimit_hit
 
 # NOTE: The entrypoint for each evaluation step
 # TODO: enable 'multiple_validation_sets' mode, return individual val_loss for each dataset
@@ -209,7 +217,7 @@ def evaluate_and_print_results(
 
     wandb_writer = state.wandb_logger
 
-    # Check if we have multiple validation datasets
+    # If using multiple validation datasets
     if (hasattr(state.cfg.dataset, 'multiple_validation_sets') and 
         state.cfg.dataset.multiple_validation_sets and 
         isinstance(data_iterator, list)):
@@ -318,9 +326,8 @@ def evaluate_and_print_results(
         print_rank_last(string)
         print_rank_last("-" * length)
         
-    else:
-        # Original single validation dataset logic
-        # TODO: if multiple_validation_datasets is True, iterate the evaluate function for each validation iterator
+    # Original single validation dataset logic
+    else:        
         total_loss_dict, collected_non_loss_data, timelimit = evaluate(
             state, forward_step_func, data_iterator, model, process_non_loss_data_func, config, verbose, non_loss_data_func
         )
