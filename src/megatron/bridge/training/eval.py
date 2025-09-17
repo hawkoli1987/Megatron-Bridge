@@ -39,6 +39,7 @@ def evaluate(
     config: ConfigContainer,
     verbose: bool = False,
     non_loss_data_func: Optional[Callable] = None,
+    per_dataset_timelimit_mins: Optional[float] = None,
 ) -> tuple[Optional[dict[str, torch.Tensor]], Optional[Any], bool]:
     """Evaluation function.
 
@@ -51,6 +52,7 @@ def evaluate(
         config (ConfigContainer): Configuration container (potentially redundant).
         verbose (bool, optional): Whether to print evaluation progress. Defaults to False.
         non_loss_data_func (Optional[Callable], optional): Function to compute non-loss data. Defaults to None.
+        per_dataset_timelimit_mins (Optional[float], optional): Per-dataset time limit in minutes. If None, uses global timelimit. Defaults to None.
 
     Returns:
         tuple[Optional[dict[str, torch.Tensor]], Optional[Any], bool]: A tuple containing:
@@ -132,16 +134,19 @@ def evaluate(
 
             state.train_state.consumed_valid_samples += eval_batch_size
 
-            if state.cfg.train.exit_duration_in_mins:
+            # Check timelimit - use per-dataset timelimit if provided, otherwise use global timelimit
+            timelimit_to_check = per_dataset_timelimit_mins if per_dataset_timelimit_mins is not None else state.cfg.train.exit_duration_in_mins
+            if timelimit_to_check:
                 train_time = (time.time() - state.train_state.start_time) / 60.0
                 done_cuda = torch.tensor(
-                    [train_time > state.cfg.train.exit_duration_in_mins], dtype=torch.int, device="cuda"
+                    [train_time > timelimit_to_check], dtype=torch.int, device="cuda"
                 )
                 torch.distributed.all_reduce(done_cuda, op=torch.distributed.ReduceOp.MAX)
                 done = done_cuda.item()
                 if done:
                     rerun_state_machine.set_mode(rerun_mode)
-                    print_rank_0("Exiting during evaluation, timelimit reached")
+                    timelimit_type = "per-dataset" if per_dataset_timelimit_mins is not None else "global"
+                    print_rank_0(f"Exiting during evaluation, {timelimit_type} timelimit reached")
                     timelimit_hit = True
                     break
 
@@ -164,7 +169,7 @@ def evaluate(
     for model_module in model:
         model_module.train()
 
-    # Partial aggregation: only if we have some completed iterations
+    # Partial aggregation: return results if we have any completed iterations (even if timelimit hit)
     if total_loss_dict:
         for key in total_loss_dict:
             numerator, denominator = total_loss_dict[key]
@@ -226,6 +231,12 @@ def evaluate_and_print_results(
         aggregated_loss_dict = {}
         total_datasets = len([dl for dl in data_iterator if dl is not None])
         
+        # Calculate per-dataset timelimit by splitting the global timelimit equally
+        per_dataset_timelimit = None
+        if state.cfg.train.exit_duration_in_mins:
+            per_dataset_timelimit = state.cfg.train.exit_duration_in_mins / total_datasets
+            print_rank_0(f"Split timelimit: {state.cfg.train.exit_duration_in_mins:.2f} min total -> {per_dataset_timelimit:.2f} min per dataset ({total_datasets} datasets)")
+        
         for i, valid_data_iter in enumerate(data_iterator):
             if valid_data_iter is not None:
                 # Get dataset path for this validation set from blend_per_split
@@ -243,7 +254,7 @@ def evaluate_and_print_results(
                 # Evaluate on this validation dataset
                 total_loss_dict, collected_non_loss_data, timelimit = evaluate(
                     state, forward_step_func, valid_data_iter, model, process_non_loss_data_func, 
-                    config, verbose, non_loss_data_func
+                    config, verbose, non_loss_data_func, per_dataset_timelimit
                 )
                 
                 # Timelimit hit during evaluation
@@ -329,7 +340,7 @@ def evaluate_and_print_results(
     # Original single validation dataset logic
     else:        
         total_loss_dict, collected_non_loss_data, timelimit = evaluate(
-            state, forward_step_func, data_iterator, model, process_non_loss_data_func, config, verbose, non_loss_data_func
+            state, forward_step_func, data_iterator, model, process_non_loss_data_func, config, verbose, non_loss_data_func, None
         )
 
         # Timelimit hit during evaluation
