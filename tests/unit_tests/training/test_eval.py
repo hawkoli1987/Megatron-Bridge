@@ -273,9 +273,11 @@ class TestEvaluate:
             verbose=False
         )
         
-        # Verify timelimit was hit
+        # Verify timelimit was hit but partial results are available
         assert timelimit is True
-        assert total_loss_dict is None
+        assert total_loss_dict is not None  # Should have partial results now
+        assert "loss" in total_loss_dict
+        assert total_loss_dict["loss"].item() == pytest.approx(0.5, rel=1e-6)  # Single iteration result
         assert collected_non_loss_data is None
 
     @patch('megatron.bridge.training.eval.get_forward_backward_func')
@@ -411,3 +413,80 @@ class TestEvaluate:
         assert timelimit is False
         assert collected_non_loss_data is None
         assert "loss" in total_loss_dict
+
+    @patch('megatron.bridge.training.eval.get_forward_backward_func')
+    @patch('megatron.bridge.training.eval.get_rerun_state_machine')
+    @patch('megatron.bridge.training.eval.fault_tolerance')
+    @patch('megatron.bridge.training.eval.parallel_state')
+    @patch('megatron.bridge.training.eval.torch.distributed')
+    @patch('megatron.bridge.training.eval.check_forward_step_func_num_args')
+    @patch('megatron.bridge.training.eval.maybe_inject_state')
+    def test_evaluate_partial_aggregation_on_timelimit(self, mock_inject_state, mock_check_args, mock_dist, mock_parallel_state,
+                                                     mock_fault_tolerance, mock_rerun_state_machine, mock_forward_backward_func):
+        """Test partial aggregation when timelimit is hit during evaluation."""
+        # Setup mocks
+        mock_check_args.return_value = 3
+        mock_inject_state.return_value = Mock()
+        
+        # Mock rerun state machine
+        mock_rerun_sm = Mock()
+        mock_rerun_sm.get_mode.return_value = "DISABLED"
+        mock_rerun_state_machine.return_value = mock_rerun_sm
+        
+        # Mock fault tolerance
+        mock_fault_tolerance.on_eval_step_start = Mock()
+        mock_fault_tolerance.on_eval_step_end = Mock()
+        
+        # Mock parallel state
+        mock_parallel_state.is_pipeline_last_stage.return_value = True
+        mock_parallel_state.get_data_parallel_group.return_value = Mock()
+        
+        # Mock distributed operations
+        mock_dist.all_reduce = Mock()
+        
+        # Mock forward backward function to simulate partial completion
+        def mock_forward_backward_func_impl(*args, **kwargs):
+            return [
+                {"loss": torch.tensor([0.5, 1.0], device="cuda")},  # First iteration
+                {"loss": torch.tensor([0.3, 1.0], device="cuda")}   # Second iteration
+            ]
+        mock_forward_backward_func.return_value = mock_forward_backward_func_impl
+        
+        # Create test data with short exit duration to trigger timelimit
+        state = self._create_mock_global_state(eval_iters=5, exit_duration_in_mins=0.001)  # Very short duration
+        # Simulate that we're past the timelimit by modifying the start time
+        state.train_state.start_time = time.time() - (0.002 * 60)  # 0.002 minutes ago
+        model = self._create_mock_model()
+        data_iterator = self._create_mock_data_iterator()
+        forward_step_func = Mock()
+        config = state.cfg
+        
+        # Call the function
+        total_loss_dict, collected_non_loss_data, timelimit = evaluate(
+            state=state,
+            forward_step_func=forward_step_func,
+            data_iterator=data_iterator,
+            model=model,
+            process_non_loss_data_func=None,
+            config=config,
+            verbose=False
+        )
+        
+        # Verify partial aggregation results
+        assert timelimit is True  # Timelimit should be hit
+        assert total_loss_dict is not None  # Should have partial results (not None)
+        assert "loss" in total_loss_dict
+        # Should have loss from completed iterations: (0.5 + 0.3) / 2 = 0.4
+        assert total_loss_dict["loss"].item() == pytest.approx(0.4, rel=1e-6)
+        assert collected_non_loss_data is None
+        
+        # Verify model was set to eval mode
+        model[0].eval.assert_called()
+        
+        # Verify rerun state machine was disabled and restored
+        mock_rerun_sm.set_mode.assert_any_call("DISABLED")
+        mock_rerun_sm.set_mode.assert_any_call("DISABLED")
+        
+        # Verify fault tolerance was called
+        mock_fault_tolerance.on_eval_step_start.assert_called()
+        mock_fault_tolerance.on_eval_step_end.assert_called()

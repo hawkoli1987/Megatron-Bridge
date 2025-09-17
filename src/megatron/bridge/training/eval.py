@@ -58,7 +58,7 @@ def evaluate(
             - collected_non_loss_data: Data collected by non_loss_data_func.
             - timelimit_hit: Boolean indicating if the time limit was reached.
     """
-    Timelimit_hit = False
+    timelimit_hit = False
     # Check num args to forward_step_func
     num_fw_args = check_forward_step_func_num_args(forward_step_func)
 
