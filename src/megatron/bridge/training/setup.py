@@ -67,6 +67,7 @@ class SetupOutput(NamedTuple):
     optimizer: MegatronOptimizer
     scheduler: OptimizerParamScheduler
     train_data_iterator: Optional[RerunDataIterator | list[RerunDataIterator]]
+    # TODO: modify this, such that it can be a list of iterators
     valid_data_iterator: Optional[RerunDataIterator | list[RerunDataIterator]]
     test_data_iterator: Optional[RerunDataIterator | list[RerunDataIterator]]
     checkpointing_context: dict[str, Any]

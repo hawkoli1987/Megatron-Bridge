@@ -174,6 +174,8 @@ def evaluate(
     return total_loss_dict, collected_non_loss_data, False
 
 
+# NOTE: The entrypoint for each evaluation step
+# TODO: enable 'multiple_validation_sets' mode, return individual val_loss for each dataset
 def evaluate_and_print_results(
     state: GlobalState,
     prefix: str,
@@ -318,6 +320,7 @@ def evaluate_and_print_results(
         
     else:
         # Original single validation dataset logic
+        # TODO: if multiple_validation_datasets is True, iterate the evaluate function for each validation iterator
         total_loss_dict, collected_non_loss_data, timelimit = evaluate(
             state, forward_step_func, data_iterator, model, process_non_loss_data_func, config, verbose, non_loss_data_func
         )

@@ -253,6 +253,7 @@ def build_train_valid_test_data_loaders(
                 valid_dataloader.append(None)
     else:
         # Single validation dataset - original logic
+        # offline evaluation
         if cfg.train.skip_train:
             valid_dataloader = build_pretraining_data_loader(
                 valid_ds,
@@ -269,6 +270,7 @@ def build_train_valid_test_data_loaders(
                 data_parallel_size=mpu.get_data_parallel_world_size(),
             )
         else:
+            # online evaluation
             valid_dataloader = build_pretraining_data_loader(
                 valid_ds,
                 train_state.consumed_valid_samples,
@@ -329,6 +331,19 @@ def build_train_valid_test_data_iterators(
     Returns:
         A tuple (train_data_iterator, valid_data_iterator, test_data_iterator).
         When multiple_validation_sets is True, valid_data_iterator will be a list of iterators.
+        
+        Example batch from Megatron Blended Dataset = next(xx_data_iterator) 
+        batch = {
+            "tokens": torch.tensor([[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]]),  # Shape: [batch_size, seq_length]
+            "labels": torch.tensor([[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]]),  # Shape: [batch_size, seq_length]
+            "loss_mask": torch.tensor([[1, 1, 1, 1, 1, 1, 1, 1, 1, 1]]), # Shape: [batch_size, seq_length]
+            "attention_mask": torch.tensor([[1, 1, 1, 1, 1, 1, 1, 1, 1, 1]]), # Shape: [batch_size, seq_length]
+            "position_ids": torch.tensor([[0, 1, 2, 3, 4, 5, 6, 7, 8, 9]]), # Shape: [batch_size, seq_length]
+            # For packed sequences:
+            "cu_seqlens": torch.tensor([0, 5, 10]),  # Cumulative sequence lengths
+            "cu_seqlens_argmin": torch.tensor([0, 0, 0]),  # Argument minimum indices
+            "max_seqlen": 10,  # Maximum sequence length in this batch
+        }
     """
 
     # Build loaders.
