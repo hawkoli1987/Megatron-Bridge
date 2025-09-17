@@ -70,6 +70,8 @@ def pretrain_train_valid_test_datasets_provider(
     print_rank_0("> building train, validation, and test datasets for GPT ...")
 
     # Build the dataset on all ranks for TP-replicated loading
+    # NOTE: if multiple_validation_datasets is True, and weights for each val_dataset are not provided, 
+    # the valid_ds will be a list of MegatronDatasets instantiated from the respective data_paths
     train_ds, valid_ds, test_ds = BlendedMegatronDatasetBuilder(
         dataset_type, train_val_test_num_samples, lambda: True, dataset_config
     ).build()

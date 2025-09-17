@@ -363,6 +363,8 @@ def train(
                 gc.collect()
             prefix = f"iteration {global_state.train_state.step}"
             timers("eval-time", log_level=0).start(barrier=True)
+
+            # Interim VALIDATION
             evaluate_and_print_results(
                 global_state,
                 prefix,
