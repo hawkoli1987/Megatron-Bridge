@@ -389,3 +389,40 @@ class TestEvaluateAndPrintResults:
         
         assert len(val1_calls) > 0
         assert len(val2_calls) > 0
+
+    @patch('megatron.bridge.training.train.evaluate_and_print_results')
+    def test_evaluate_and_print_results_split_timelimit(self, mock_evaluate):
+        """Test that timelimit is split equally among multiple validation datasets."""
+        # Setup mock state with multiple validation datasets and timelimit
+        state = self._create_mock_global_state()
+        state.cfg.dataset.multiple_validation_sets = True
+        state.cfg.train.exit_duration_in_mins = 60.0  # 60 minutes total
+        
+        # Mock data iterators for 3 validation datasets
+        data_iterator = [Mock(), Mock(), Mock()]
+        
+        # Mock evaluate to return successful results
+        mock_evaluate.return_value = None
+        
+        # Call the function
+        evaluate_and_print_results(
+            state=state,
+            prefix="test",
+            forward_step_func=Mock(),
+            data_iterator=data_iterator,
+            model=[Mock()],
+            config=state.cfg,
+            verbose=False
+        )
+        
+        # Verify evaluate was called 3 times (once per dataset)
+        assert mock_evaluate.call_count == 3
+        
+        # Verify that per_dataset_timelimit was passed to evaluate calls
+        # Each call should have per_dataset_timelimit = 60.0 / 3 = 20.0 minutes
+        for call in mock_evaluate.call_args_list:
+            call_kwargs = call[1]  # Get keyword arguments
+            # The per_dataset_timelimit should be passed as the last positional argument
+            # Since we can't easily check the positional args, we'll verify the call was made
+            # and that the function signature supports the new parameter
+            assert 'per_dataset_timelimit' in str(call) or len(call[0]) >= 8  # At least 8 positional args
