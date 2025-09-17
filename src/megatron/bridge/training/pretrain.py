@@ -72,6 +72,7 @@ def pretrain(
             )
 
         barrier_and_log("after training is done")
+        # Final Checkpoint Saving
         ckpt_config = config.checkpoint
         if ckpt_config.save and state.train_state.step != 0 and ckpt_config.save_interval != 0:
             save_checkpoint(
@@ -89,7 +90,7 @@ def pretrain(
 
     iteration = state.train_state.step
 
-    # VALIDATION
+    # Final VALIDATION
     if state.train_state.do_valid:
         prefix = f"iteration {iteration} on validation set"
         evaluate_and_print_results(
@@ -102,6 +103,7 @@ def pretrain(
             verbose=True,
             write_to_tensorboard=not config.train.skip_train,
         )
+    # Final TESTING
     if state.train_state.do_test:
         prefix = f"iteration {iteration} on test set"
         evaluate_and_print_results(
