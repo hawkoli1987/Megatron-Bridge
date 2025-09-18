@@ -411,3 +411,101 @@ class TestEvaluate:
         assert timelimit is False
         assert collected_non_loss_data is None
         assert "loss" in total_loss_dict
+
+
+class TestValidationDataloaderCreation:
+    """Test validation dataloader creation with decoupled configuration."""
+
+    def test_validation_config_attributes_exist(self):
+        """Test that validation config attributes exist and can be accessed."""
+        from megatron.bridge.training.config import TrainingConfig, GPTDatasetConfig
+        
+        # Test TrainingConfig validation attributes
+        train_config = TrainingConfig(
+            micro_batch_size=16,
+            global_batch_size=64,
+            val_micro_batch_size=8,
+            val_global_batch_size=32,
+            train_iters=1000
+        )
+        
+        # Verify validation attributes exist
+        assert hasattr(train_config, 'val_micro_batch_size')
+        assert hasattr(train_config, 'val_global_batch_size')
+        assert train_config.val_micro_batch_size == 8
+        assert train_config.val_global_batch_size == 32
+        
+        # Test DataloaderConfig validation attributes
+        dataset_config = GPTDatasetConfig(
+            random_seed=1234,
+            sequence_length=512,
+            reset_position_ids=False,
+            reset_attention_mask=False,
+            eod_mask_loss=False,
+            num_workers=8,
+            pin_memory=True,
+            persistent_workers=True,
+            val_num_workers=4,
+            val_pin_memory=False,
+            val_persistent_workers=False
+        )
+        
+        # Verify validation attributes exist
+        assert hasattr(dataset_config, 'val_num_workers')
+        assert hasattr(dataset_config, 'val_pin_memory')
+        assert hasattr(dataset_config, 'val_persistent_workers')
+        assert dataset_config.val_num_workers == 4
+        assert dataset_config.val_pin_memory == False
+        assert dataset_config.val_persistent_workers == False
+            
+    def test_validation_config_different_from_training(self):
+        """Test that validation config values can be different from training values."""
+        from megatron.bridge.training.config import ConfigContainer, TrainingConfig, GPTDatasetConfig
+        from tests.unit_tests.training.test_config import create_test_gpt_config, create_test_gpt_dataset_config, create_test_config_container
+        from unittest.mock import patch
+        
+        # Create config with different training and validation values
+        train_config = TrainingConfig(
+            micro_batch_size=16,      # training uses 16
+            global_batch_size=64,     # training uses 64
+            val_micro_batch_size=8,   # validation uses 8 (different!)
+            val_global_batch_size=32, # validation uses 32 (different!)
+            train_iters=1000
+        )
+        
+        dataset_config = create_test_gpt_dataset_config(sequence_length=512)
+        dataset_config.num_workers = 8           # training uses 8
+        dataset_config.pin_memory = True         # training uses True
+        dataset_config.persistent_workers = True # training uses True
+        dataset_config.val_num_workers = 4       # validation uses 4 (different!)
+        dataset_config.val_pin_memory = False    # validation uses False (different!)
+        dataset_config.val_persistent_workers = False # validation uses False (different!)
+        
+        model_config = create_test_gpt_config()
+        
+        # Create and validate config
+        with patch('megatron.bridge.utils.common_utils.get_world_size_safe', return_value=4):
+            config, _, _ = create_test_config_container(
+                world_size_override=4,
+                model_config=model_config,
+                train_config=train_config,
+                dataset_config_override=dataset_config
+            )
+            
+            config.validate()
+            
+            # Verify that validation values are preserved and different from training
+            assert config.train.micro_batch_size == 16
+            assert config.train.val_micro_batch_size == 8  # Different!
+            
+            assert config.train.global_batch_size == 64
+            assert config.train.val_global_batch_size == 32  # Different!
+            
+            assert config.dataset.num_workers == 8
+            assert config.dataset.val_num_workers == 4  # Different!
+            
+            assert config.dataset.pin_memory == True
+            assert config.dataset.val_pin_memory == False  # Different!
+            
+            assert config.dataset.persistent_workers == True
+            assert config.dataset.val_persistent_workers == False  # Different!

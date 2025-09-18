@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import math
+import os
 import time
 from typing import Any, Callable, Optional, Union
 
@@ -39,6 +40,7 @@ def evaluate(
     config: ConfigContainer,
     verbose: bool = False,
     non_loss_data_func: Optional[Callable] = None,
+    log_timing: bool = True,  # Add this parameter
 ) -> tuple[Optional[dict[str, torch.Tensor]], Optional[Any], bool]:
     """Evaluation function.
 
@@ -51,12 +53,7 @@ def evaluate(
         config (ConfigContainer): Configuration container (potentially redundant).
         verbose (bool, optional): Whether to print evaluation progress. Defaults to False.
         non_loss_data_func (Optional[Callable], optional): Function to compute non-loss data. Defaults to None.
-
-    Returns:
-        tuple[Optional[dict[str, torch.Tensor]], Optional[Any], bool]: A tuple containing:
-            - total_loss_dict: Dictionary of averaged losses.
-            - collected_non_loss_data: Data collected by non_loss_data_func.
-            - timelimit_hit: Boolean indicating if the time limit was reached.
+        log_timing (bool, optional): Whether to log timing information. Defaults to True.
     """
     # Check num args to forward_step_func
     num_fw_args = check_forward_step_func_num_args(forward_step_func)
@@ -76,8 +73,8 @@ def evaluate(
     total_loss_dict = {}
 
     # make validation batch size independent from training batch size
-    eval_batch_size = state.cfg.train.global_batch_size
-    eval_num_microbatches = eval_batch_size // (state.cfg.train.micro_batch_size * state.cfg.data_parallel_size)
+    eval_batch_size = state.cfg.train.val_global_batch_size
+    eval_num_microbatches = eval_batch_size // (state.cfg.train.val_micro_batch_size * state.cfg.data_parallel_size)
 
     with torch.no_grad():
         iteration = 0
@@ -99,7 +96,7 @@ def evaluate(
                 model=model,
                 num_microbatches=eval_num_microbatches,
                 seq_length=state.cfg.model.seq_length,
-                micro_batch_size=state.cfg.train.micro_batch_size,
+                micro_batch_size=state.cfg.train.val_micro_batch_size,
                 forward_only=True,
             )
             fault_tolerance.on_eval_step_end(state)
@@ -153,7 +150,7 @@ def evaluate(
                 model=model,
                 num_microbatches=get_num_microbatches(),
                 seq_length=state.cfg.model.seq_length,
-                micro_batch_size=state.cfg.train.micro_batch_size,
+                micro_batch_size=state.cfg.train.val_micro_batch_size,
                 forward_only=True,
                 collect_non_loss_data=True,
             )
@@ -167,12 +164,14 @@ def evaluate(
         total_loss_dict[key] = numerator / denominator
 
     timers("evaluate").stop()
-    timers.log(["evaluate"])
+    
+    # Only log timing if requested
+    if log_timing:
+        timers.log(["evaluate"])
 
     rerun_state_machine.set_mode(rerun_mode)
 
     return total_loss_dict, collected_non_loss_data, False
-
 
 # NOTE: The entrypoint for each evaluation step
 # TODO: enable 'multiple_validation_sets' mode, return individual val_loss for each dataset
@@ -214,6 +213,10 @@ def evaluate_and_print_results(
         state.cfg.dataset.multiple_validation_sets and 
         isinstance(data_iterator, list)):
         # Handle multiple validation datasets
+        # Start timing for total evaluation across all datasets
+        timers = state.timers
+        timers("evaluate-all-datasets", log_level=0).start(barrier=True)
+        
         validation_results = {}
         aggregated_loss_dict = {}
         total_datasets = len([dl for dl in data_iterator if dl is not None])
@@ -235,44 +238,49 @@ def evaluate_and_print_results(
                 # Evaluate on this validation dataset
                 total_loss_dict, collected_non_loss_data, timelimit = evaluate(
                     state, forward_step_func, valid_data_iter, model, process_non_loss_data_func, 
-                    config, verbose, non_loss_data_func
+                    config, verbose, non_loss_data_func, log_timing=False  # Disable per-dataset timing
                 )
                 
                 # Timelimit hit during evaluation
                 if timelimit:
+                    timers("evaluate-all-datasets").stop()
                     return
                 
                 # Store results for this dataset
                 validation_results[dataset_path] = (total_loss_dict, collected_non_loss_data, timelimit)
                 
                 # Log individual dataset results to tensorboard and wandb
+                dataset_name = os.path.basename(dataset_path) if state.cfg.logger.multiple_validation_sets_use_dataset_name else dataset_path
                 for key in total_loss_dict:
                     if writer:
-                        writer.add_scalar(f"{key} validation {dataset_path}", total_loss_dict[key].item(), state.train_state.step)
+                        writer.add_scalar(f"{key} validation {dataset_name}", total_loss_dict[key].item(), state.train_state.step)
                         writer.add_scalar(
-                            f"{key} validation {dataset_path} vs samples",
+                            f"{key} validation {dataset_name} vs samples",
                             total_loss_dict[key].item(),
                             state.train_state.consumed_train_samples,
                         )
                         if state.cfg.logger.log_validation_ppl_to_tensorboard:
                             ppl = math.exp(min(20, total_loss_dict[key].item()))
-                            writer.add_scalar(f"{key} validation {dataset_path} ppl", ppl, state.train_state.step)
+                            writer.add_scalar(f"{key} validation {dataset_name} ppl", ppl, state.train_state.step)
                             writer.add_scalar(
-                                f"{key} validation {dataset_path} ppl vs samples", 
+                                f"{key} validation {dataset_name} ppl vs samples", 
                                 ppl, state.train_state.consumed_train_samples
                             )
 
                     if wandb_writer and is_last_rank():
-                        wandb_writer.log({f"{key} validation {dataset_path}": total_loss_dict[key].item()}, state.train_state.step)
+                        wandb_writer.log({f"{key} validation {dataset_name}": total_loss_dict[key].item()}, state.train_state.step)
                         if state.cfg.logger.log_validation_ppl_to_tensorboard:
                             ppl = math.exp(min(20, total_loss_dict[key].item()))
-                            wandb_writer.log({f"{key} validation {dataset_path} ppl": ppl}, state.train_state.step)
+                            wandb_writer.log({f"{key} validation {dataset_name} ppl": ppl}, state.train_state.step)
                 
                 # Aggregate losses for overall validation loss
                 for key in total_loss_dict:
                     if key not in aggregated_loss_dict:
                         aggregated_loss_dict[key] = 0.0
                     aggregated_loss_dict[key] += total_loss_dict[key].item()
+        
+        # Stop timing for total evaluation across all datasets
+        timers("evaluate-all-datasets").stop()
         
         # Calculate averaged losses across all validation datasets
         for key in aggregated_loss_dict:
@@ -318,11 +326,15 @@ def evaluate_and_print_results(
         print_rank_last(string)
         print_rank_last("-" * length)
         
+        # Log the total evaluation time across all datasets
+        timers.log(["evaluate-all-datasets"])
+        
     else:
         # Original single validation dataset logic
         # TODO: if multiple_validation_datasets is True, iterate the evaluate function for each validation iterator
         total_loss_dict, collected_non_loss_data, timelimit = evaluate(
-            state, forward_step_func, data_iterator, model, process_non_loss_data_func, config, verbose, non_loss_data_func
+            state, forward_step_func, data_iterator, model, process_non_loss_data_func, config, verbose, non_loss_data_func,
+            log_timing=False  # Disable per-dataset timing
         )
 
         # Timelimit hit during evaluation
