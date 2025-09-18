@@ -40,6 +40,7 @@ def evaluate(
     config: ConfigContainer,
     verbose: bool = False,
     non_loss_data_func: Optional[Callable] = None,
+    log_timing: bool = True,  # Add this parameter
 ) -> tuple[Optional[dict[str, torch.Tensor]], Optional[Any], bool]:
     """Evaluation function.
 
@@ -90,6 +91,7 @@ def evaluate(
         config (ConfigContainer): Configuration container (potentially redundant).
         verbose (bool, optional): Whether to print evaluation progress. Defaults to False.
         non_loss_data_func (Optional[Callable], optional): Function to compute non-loss data. Defaults to None.
+        log_timing (bool, optional): Whether to log timing information. Defaults to True.
 
     Returns:
         tuple[Optional[dict[str, torch.Tensor]], Optional[Any], bool]: A tuple containing:
@@ -221,7 +223,10 @@ def evaluate(
         total_loss_dict[key] = numerator / denominator
 
     timers("evaluate").stop()
-    timers.log(["evaluate"])
+    
+    # Only log timing if requested
+    if log_timing:
+        timers.log(["evaluate"])
 
     rerun_state_machine.set_mode(rerun_mode)
 
@@ -267,6 +272,10 @@ def evaluate_and_print_results(
         state.cfg.dataset.multiple_validation_sets and 
         isinstance(data_iterator, list)):
         # Handle multiple validation datasets
+        # Start timing for total evaluation across all datasets
+        timers = state.timers
+        timers("evaluate-all-datasets", log_level=0).start(barrier=True)
+        
         validation_results = {}
         aggregated_loss_dict = {}
         total_datasets = len([dl for dl in data_iterator if dl is not None])
@@ -293,6 +302,7 @@ def evaluate_and_print_results(
                 
                 # Timelimit hit during evaluation
                 if timelimit:
+                    timers("evaluate-all-datasets").stop()
                     return
                 
                 # Store results for this dataset
@@ -327,6 +337,9 @@ def evaluate_and_print_results(
                     if key not in aggregated_loss_dict:
                         aggregated_loss_dict[key] = 0.0
                     aggregated_loss_dict[key] += total_loss_dict[key].item()
+        
+        # Stop timing for total evaluation across all datasets
+        timers("evaluate-all-datasets").stop()
         
         # Calculate averaged losses across all validation datasets
         for key in aggregated_loss_dict:
@@ -372,10 +385,14 @@ def evaluate_and_print_results(
         print_rank_last(string)
         print_rank_last("-" * length)
         
+        # Log the total evaluation time across all datasets
+        timers.log(["evaluate-all-datasets"])
+        
     else:
         # Original single validation dataset logic
         total_loss_dict, collected_non_loss_data, timelimit = evaluate(
-            state, forward_step_func, data_iterator, model, process_non_loss_data_func, config, verbose, non_loss_data_func
+            state, forward_step_func, data_iterator, model, process_non_loss_data_func, config, verbose, non_loss_data_func,
+            log_timing=False  # Disable per-dataset timing
         )
 
         # Timelimit hit during evaluation
