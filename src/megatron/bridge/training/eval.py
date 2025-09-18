@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import math
+import os
 import time
 from typing import Any, Callable, Optional, Union
 
@@ -76,8 +77,8 @@ def evaluate(
     total_loss_dict = {}
 
     # make validation batch size independent from training batch size
-    eval_batch_size = state.cfg.train.global_batch_size
-    eval_num_microbatches = eval_batch_size // (state.cfg.train.micro_batch_size * state.cfg.data_parallel_size)
+    eval_batch_size = state.cfg.train.val_global_batch_size
+    eval_num_microbatches = eval_batch_size // (state.cfg.train.val_micro_batch_size * state.cfg.data_parallel_size)
 
     with torch.no_grad():
         iteration = 0
@@ -99,7 +100,7 @@ def evaluate(
                 model=model,
                 num_microbatches=eval_num_microbatches,
                 seq_length=state.cfg.model.seq_length,
-                micro_batch_size=state.cfg.train.micro_batch_size,
+                micro_batch_size=state.cfg.train.val_micro_batch_size,
                 forward_only=True,
             )
             fault_tolerance.on_eval_step_end(state)
@@ -153,7 +154,7 @@ def evaluate(
                 model=model,
                 num_microbatches=get_num_microbatches(),
                 seq_length=state.cfg.model.seq_length,
-                micro_batch_size=state.cfg.train.micro_batch_size,
+                micro_batch_size=state.cfg.train.val_micro_batch_size,
                 forward_only=True,
                 collect_non_loss_data=True,
             )
@@ -246,27 +247,28 @@ def evaluate_and_print_results(
                 validation_results[dataset_path] = (total_loss_dict, collected_non_loss_data, timelimit)
                 
                 # Log individual dataset results to tensorboard and wandb
+                dataset_name = os.path.basename(dataset_path) if state.cfg.logger.multiple_validation_sets_use_dataset_name else dataset_path
                 for key in total_loss_dict:
                     if writer:
-                        writer.add_scalar(f"{key} validation {dataset_path}", total_loss_dict[key].item(), state.train_state.step)
+                        writer.add_scalar(f"{key} validation {dataset_name}", total_loss_dict[key].item(), state.train_state.step)
                         writer.add_scalar(
-                            f"{key} validation {dataset_path} vs samples",
+                            f"{key} validation {dataset_name} vs samples",
                             total_loss_dict[key].item(),
                             state.train_state.consumed_train_samples,
                         )
                         if state.cfg.logger.log_validation_ppl_to_tensorboard:
                             ppl = math.exp(min(20, total_loss_dict[key].item()))
-                            writer.add_scalar(f"{key} validation {dataset_path} ppl", ppl, state.train_state.step)
+                            writer.add_scalar(f"{key} validation {dataset_name} ppl", ppl, state.train_state.step)
                             writer.add_scalar(
-                                f"{key} validation {dataset_path} ppl vs samples", 
+                                f"{key} validation {dataset_name} ppl vs samples", 
                                 ppl, state.train_state.consumed_train_samples
                             )
 
                     if wandb_writer and is_last_rank():
-                        wandb_writer.log({f"{key} validation {dataset_path}": total_loss_dict[key].item()}, state.train_state.step)
+                        wandb_writer.log({f"{key} validation {dataset_name}": total_loss_dict[key].item()}, state.train_state.step)
                         if state.cfg.logger.log_validation_ppl_to_tensorboard:
                             ppl = math.exp(min(20, total_loss_dict[key].item()))
-                            wandb_writer.log({f"{key} validation {dataset_path} ppl": ppl}, state.train_state.step)
+                            wandb_writer.log({f"{key} validation {dataset_name} ppl": ppl}, state.train_state.step)
                 
                 # Aggregate losses for overall validation loss
                 for key in total_loss_dict:
