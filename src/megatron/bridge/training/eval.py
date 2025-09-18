@@ -297,7 +297,7 @@ def evaluate_and_print_results(
                 # Evaluate on this validation dataset
                 total_loss_dict, collected_non_loss_data, timelimit = evaluate(
                     state, forward_step_func, valid_data_iter, model, process_non_loss_data_func, 
-                    config, verbose, non_loss_data_func
+                    config, verbose, non_loss_data_func, log_timing=False  # Disable per-dataset timing
                 )
                 
                 # Timelimit hit during evaluation
