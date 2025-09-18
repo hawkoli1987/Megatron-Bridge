@@ -86,6 +86,7 @@ def create_test_training_config(**kwargs: Any) -> TrainingConfig:
     """Creates an instance of TrainingConfig with defaults for testing."""
     defaults = {
         "global_batch_size": 32,
+        "micro_batch_size": 4,
         "train_iters": 1000,
     }
     defaults.update(kwargs)
