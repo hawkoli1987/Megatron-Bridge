@@ -38,6 +38,7 @@ from megatron.bridge.training.config import (
     SchedulerConfig,
     TokenizerConfig,
     TrainingConfig,
+    _validate_and_sync_distributed_optimizer_settings,
 )
 
 
@@ -587,7 +588,7 @@ class TestConfigContainerValidation:
         try:
             container.validate()
             # lr_decay_iters in scheduler_config defaults to train_config.train_iters
-            expected_lr_warmup_steps = lr_warmup_fraction * train_cfg.train_iters
+            expected_lr_warmup_steps = lr_warmup_fraction * train_cfg.train_iters * train_cfg.global_batch_size
             assert container.scheduler.lr_warmup_steps == expected_lr_warmup_steps
         finally:
             restore_get_world_size_safe(og_ws, cfg_mod)
@@ -623,7 +624,7 @@ class TestConfigContainerValidation:
         )
         try:
             container.validate()
-            expected_lr_warmup_steps = lr_warmup_fraction * train_cfg.train_iters
+            expected_lr_warmup_steps = lr_warmup_fraction * train_cfg.train_iters * train_cfg.global_batch_size
             assert container.scheduler.lr_warmup_steps == expected_lr_warmup_steps
         finally:
             restore_get_world_size_safe(og_ws, cfg_mod)
@@ -899,7 +900,7 @@ class TestConfigContainerValidation:
             container.model.gradient_accumulation_fusion = True
             container.ddp.average_in_collective = True
             container.validate()
-            assert container.model.gradient_accumulation_fusion is False
+            assert container.model.gradient_accumulation_fusion is True
             assert container.ddp.average_in_collective is False
         finally:
             restore_get_world_size_safe(og_ws, cfg_mod)
@@ -920,6 +921,26 @@ class TestConfigContainerValidation:
         )
         try:
             with pytest.raises(ValueError):
+                container.validate()
+        finally:
+            restore_get_world_size_safe(og_ws, cfg_mod)
+
+    def test_megatron_fsdp_config_with_dp_last_dim(self, monkeypatch):
+        """Test MegatronFSDP config with use_tp_pp_dp_mapping, should raise ValueError."""
+        gpt_model_cfg = create_test_gpt_config()
+        train_cfg = create_test_training_config(train_iters=500, global_batch_size=16)
+        sched_cfg = create_test_scheduler_config()
+        dist_cfg = create_test_distributed_init_config(use_megatron_fsdp=True, use_tp_pp_dp_mapping=True)
+
+        container, og_ws, cfg_mod = create_test_config_container(
+            world_size_override=1,
+            model_config=gpt_model_cfg,
+            train_config=train_cfg,
+            scheduler_config=sched_cfg,
+            dist_config=dist_cfg,
+        )
+        try:
+            with pytest.raises(AssertionError):
                 container.validate()
         finally:
             restore_get_world_size_safe(og_ws, cfg_mod)
@@ -1604,3 +1625,259 @@ class TestValidationConfigResolution:
         assert config.dataset.val_persistent_workers == True  # fallback
         assert config.train.val_micro_batch_size == 16  # fallback
         assert config.train.val_global_batch_size == 32  # calculated: 16 * 2
+
+
+class TestSyncAndValidateExternalCudaGraph:
+    """Tests for the `_sync_and_validate_external_cuda_graph` method of the `ConfigContainer` class."""
+
+    def test_rng_config_sync_to_model(self):
+        """Test that rng.te_rng_tracker syncs to model.use_te_rng_tracker."""
+        gpt_model_cfg = create_test_gpt_config(use_te_rng_tracker=False)
+        rng_cfg = RNGConfig(te_rng_tracker=True)
+
+        container, _, _ = create_test_config_container(world_size_override=1, model_config=gpt_model_cfg)
+
+        container.rng = rng_cfg
+
+        container._sync_and_validate_external_cuda_graph()
+        # RNG config should sync to model config
+        assert container.model.use_te_rng_tracker is True
+
+    def test_rng_config_sync_preserves_model_override(self):
+        """Test that model.use_te_rng_tracker is preserved when already True."""
+        gpt_model_cfg = create_test_gpt_config(use_te_rng_tracker=True)
+        rng_cfg = RNGConfig(te_rng_tracker=False)
+
+        container, _, _ = create_test_config_container(world_size_override=1, model_config=gpt_model_cfg)
+
+        container.rng = rng_cfg
+
+        container._sync_and_validate_external_cuda_graph()
+        # Model config should sync to RNG config
+        assert container.rng.te_rng_tracker is True
+
+    def test_cuda_graph_mutual_exclusivity_error(self):
+        """Test that enable_cuda_graph and external_cuda_graph cannot both be True."""
+        gpt_model_cfg = create_test_gpt_config(enable_cuda_graph=True, external_cuda_graph=True)
+
+        container, _, _ = create_test_config_container(world_size_override=1, model_config=gpt_model_cfg)
+
+        with pytest.raises(
+            AssertionError,
+            match="enable_cuda_graph and external_cuda_graph cannot be enabled at the same time",
+        ):
+            container._sync_and_validate_external_cuda_graph()
+
+    @patch("megatron.bridge.training.config.warn_rank_0")
+    def test_te_rng_tracker_auto_enable_with_enable_cuda_graph(self, mock_warn_rank_0):
+        """Test that te_rng_tracker is auto-enabled when using transformer_engine with CUDA graphs."""
+        gpt_model_cfg = create_test_gpt_config(
+            transformer_impl="transformer_engine",
+            use_te_rng_tracker=False,
+            enable_cuda_graph=True,
+        )
+
+        container, _, _ = create_test_config_container(world_size_override=1, model_config=gpt_model_cfg)
+
+        container._sync_and_validate_external_cuda_graph()
+        # Should auto-enable te_rng_tracker and warn
+        assert container.model.use_te_rng_tracker is True
+        mock_warn_rank_0.assert_called_once_with("te_rng_tracker is not enabled, enabling it for CUDA graphs.")
+
+    @patch("megatron.bridge.training.config.warn_rank_0")
+    def test_te_rng_tracker_auto_enable_with_external_cuda_graph(self, mock_warn_rank_0):
+        """Test that te_rng_tracker is auto-enabled when using transformer_engine with external CUDA graphs."""
+        gpt_model_cfg = create_test_gpt_config(
+            transformer_impl="transformer_engine",
+            use_te_rng_tracker=False,
+            external_cuda_graph=True,
+        )
+
+        container, _, _ = create_test_config_container(world_size_override=1, model_config=gpt_model_cfg)
+
+        container._sync_and_validate_external_cuda_graph()
+        # Should auto-enable te_rng_tracker and warn
+        assert container.model.use_te_rng_tracker is True
+        mock_warn_rank_0.assert_called_once_with("te_rng_tracker is not enabled, enabling it for CUDA graphs.")
+
+    @patch("megatron.bridge.training.config.warn_rank_0")
+    def test_te_rng_tracker_no_warn_when_already_enabled(self, mock_warn_rank_0):
+        """Test that no warning is issued when te_rng_tracker is already enabled."""
+        gpt_model_cfg = create_test_gpt_config(
+            transformer_impl="transformer_engine",
+            use_te_rng_tracker=True,
+            enable_cuda_graph=True,
+        )
+
+        container, _, _ = create_test_config_container(world_size_override=1, model_config=gpt_model_cfg)
+
+        container._sync_and_validate_external_cuda_graph()
+        # Should not warn since te_rng_tracker is already enabled
+        mock_warn_rank_0.assert_not_called()
+
+    @patch("os.getenv")
+    def test_expandable_segments_validation_error(self, mock_getenv):
+        """Test that expandable_segments:True in PYTORCH_CUDA_ALLOC_CONF raises error with external CUDA graphs."""
+        mock_getenv.side_effect = ["0", "0", "expandable_segments:True"]
+
+        gpt_model_cfg = create_test_gpt_config(external_cuda_graph=True)
+
+        container, _, _ = create_test_config_container(world_size_override=1, model_config=gpt_model_cfg)
+
+        with pytest.raises(
+            AssertionError,
+            match="expandable_segments:True may not be safe when using CUDA Graphs",
+        ):
+            container._sync_and_validate_external_cuda_graph()
+
+    @patch("os.getenv")
+    def test_expandable_segments_validation_pass(self, mock_getenv):
+        """Test that expandable_segments validation passes when not set or set to False."""
+        # Test with expandable_segments:False
+        mock_getenv.side_effect = ["0", "0", ""]
+
+        gpt_model_cfg = create_test_gpt_config(external_cuda_graph=True)
+
+        container, _, _ = create_test_config_container(world_size_override=1, model_config=gpt_model_cfg)
+
+        container._sync_and_validate_external_cuda_graph()  # Should pass
+
+    def test_no_cuda_graph_features_enabled(self):
+        """Test normal case where no CUDA graph features are enabled."""
+        gpt_model_cfg = create_test_gpt_config(
+            enable_cuda_graph=False,
+            external_cuda_graph=False,
+            transformer_impl="local",
+            use_te_rng_tracker=False,
+        )
+
+        container, _, _ = create_test_config_container(world_size_override=1, model_config=gpt_model_cfg)
+
+        container._sync_and_validate_external_cuda_graph()  # Should pass without any changes
+        assert container.model.use_te_rng_tracker is False
+
+    def test_all_validations_combined(self):
+        """Test a valid configuration with external CUDA graphs that passes all validations."""
+        gpt_model_cfg = create_test_gpt_config(
+            external_cuda_graph=True,
+            transformer_impl="transformer_engine",
+            use_te_rng_tracker=True,
+            recompute_granularity="selective",
+        )
+
+        rng_cfg = RNGConfig(te_rng_tracker=True)
+
+        container, _, _ = create_test_config_container(world_size_override=1, model_config=gpt_model_cfg)
+        container.rng = rng_cfg
+
+        container._sync_and_validate_external_cuda_graph()
+        assert container.model.use_te_rng_tracker is True
+
+
+class TestDistributedOptimizerValidation:
+    """Tests for the _validate_and_sync_distributed_optimizer_settings function."""
+
+    @pytest.mark.parametrize(
+        "ddp_setting, optimizer_setting, expected_final_state, should_print_message, expected_message_parts",
+        [
+            # Cases where sync is needed
+            (
+                True,
+                False,
+                True,
+                True,
+                ["ddp.use_distributed_optimizer=True", "optimizer.use_distributed_optimizer=False"],
+            ),
+            (
+                False,
+                True,
+                True,
+                True,
+                ["ddp.use_distributed_optimizer=False", "optimizer.use_distributed_optimizer=True"],
+            ),
+            # Cases where no sync is needed
+            (True, True, True, False, []),
+            (False, False, False, False, []),
+        ],
+    )
+    @patch("megatron.bridge.training.config.warn_rank_0")
+    def test_distributed_optimizer_sync_scenarios(
+        self,
+        mock_warn_rank_0,
+        ddp_setting,
+        optimizer_setting,
+        expected_final_state,
+        should_print_message,
+        expected_message_parts,
+    ):
+        """Test various distributed optimizer sync scenarios."""
+        gpt_model_cfg = create_test_gpt_config()
+        ddp_cfg = create_test_ddp_config(use_distributed_optimizer=ddp_setting)
+        optimizer_cfg = create_test_optimizer_config(use_distributed_optimizer=optimizer_setting)
+
+        container, og_ws, cfg_mod = create_test_config_container(
+            world_size_override=1,
+            model_config=gpt_model_cfg,
+            ddp_config=ddp_cfg,
+            optimizer_config=optimizer_cfg,
+        )
+
+        try:
+            # Before validation
+            assert container.ddp.use_distributed_optimizer is ddp_setting
+            assert container.optimizer.use_distributed_optimizer is optimizer_setting
+
+            # Call the validation function directly
+            _validate_and_sync_distributed_optimizer_settings(container)
+
+            # After validation - both should match expected final state
+            assert container.ddp.use_distributed_optimizer is expected_final_state
+            assert container.optimizer.use_distributed_optimizer is expected_final_state
+
+            # Check warning behavior
+            if should_print_message:
+                mock_warn_rank_0.assert_called_once()
+                call_args = mock_warn_rank_0.call_args[0][0]
+                assert "Distributed optimizer settings were not in sync" in call_args
+                assert "Automatically enabling distributed optimizer for both settings" in call_args
+                for expected_part in expected_message_parts:
+                    assert expected_part in call_args
+            else:
+                mock_warn_rank_0.assert_not_called()
+
+        finally:
+            restore_get_world_size_safe(og_ws, cfg_mod)
+
+    @patch("megatron.bridge.training.config.warn_rank_0")
+    def test_integration_with_config_container_validation(self, mock_warn_rank_0):
+        """Test that the function is properly called during ConfigContainer.validate()."""
+        gpt_model_cfg = create_test_gpt_config()
+        ddp_cfg = create_test_ddp_config(use_distributed_optimizer=True)
+        optimizer_cfg = create_test_optimizer_config(use_distributed_optimizer=False)
+
+        container, og_ws, cfg_mod = create_test_config_container(
+            world_size_override=1,
+            model_config=gpt_model_cfg,
+            ddp_config=ddp_cfg,
+            optimizer_config=optimizer_cfg,
+        )
+
+        try:
+            # Before validation
+            assert container.ddp.use_distributed_optimizer is True
+            assert container.optimizer.use_distributed_optimizer is False
+
+            # Call container.validate() which should trigger our function
+            container.validate()
+
+            # After validation - both should be True
+            assert container.ddp.use_distributed_optimizer is True
+            assert container.optimizer.use_distributed_optimizer is True
+
+            # Should have issued the sync warning
+            mock_warn_rank_0.assert_called()
+            call_args = mock_warn_rank_0.call_args[0][0]
+            assert "Distributed optimizer settings were not in sync" in call_args
+
+        finally:
+            restore_get_world_size_safe(og_ws, cfg_mod)

@@ -15,9 +15,10 @@
 import logging
 import os
 import signal
+from abc import ABC, abstractmethod
 from dataclasses import dataclass, field, fields
 from pathlib import Path
-from typing import Any, Literal, Optional, Union
+from typing import Any, Literal, Optional, Tuple, Union
 
 from megatron.core.datasets.gpt_dataset import GPTDatasetConfig as MCoreGPTDatasetConfig
 from megatron.core.distributed import DistributedDataParallelConfig as MCoreDistributedDataParallelConfig
@@ -25,14 +26,19 @@ from megatron.core.optimizer import OptimizerConfig as MCoreOptimizerConfig
 
 from megatron.bridge.data.datasets.packed_sequence import PackedSequenceSpecs
 from megatron.bridge.models import GPTModelProvider, T5ModelProvider
-from megatron.bridge.models.mamba.mamba_provider import MambaProvider
+from megatron.bridge.models.mamba.mamba_provider import MambaModelProvider
 from megatron.bridge.peft.base import PEFT
 from megatron.bridge.training.comm_overlap import CommOverlapConfig
 from megatron.bridge.training.deepep import validate_deepep
 from megatron.bridge.training.mixed_precision import MixedPrecisionConfig, get_mixed_precision_config
 from megatron.bridge.training.tokenizers.config import TokenizerConfig
+from megatron.bridge.training.tokenizers.tokenizer import MegatronTokenizer
 from megatron.bridge.training.utils.config_utils import _ConfigContainerBase as Container
-from megatron.bridge.utils.common_utils import get_world_size_safe, print_rank_0
+from megatron.bridge.utils.common_utils import (
+    get_world_size_safe,
+    print_rank_0,
+    warn_rank_0,
+)
 
 
 @dataclass
@@ -229,6 +235,73 @@ class DataloaderConfig:
     val_persistent_workers: Optional[bool] = None
     """Whether to keep validation data loading workers persistent. If None, uses persistent_workers."""
 
+
+
+@dataclass(frozen=True)
+class DatasetBuildContext:
+    """Interface that encapsulates framework internals.
+
+    This context provides metadata needed to build datasets
+    while hiding implementation details of the framework.
+
+    Attributes:
+        train_samples: Number of samples for training dataset
+        valid_samples: Number of samples for validation dataset
+        test_samples: Number of samples for test dataset
+        tokenizer: Optional tokenizer instance for text processing
+    """
+
+    train_samples: int
+    valid_samples: int
+    test_samples: int
+    tokenizer: Optional[MegatronTokenizer] = None
+
+
+@dataclass
+class DatasetProvider(DataloaderConfig, ABC):
+    """Abstract base class for custom dataset configurations.
+
+    Provides an interface for users to implement their own dataset builders
+    while automatically inheriting all DataloaderConfig functionality.
+
+    Users must:
+    1. Inherit from this class
+    2. Implement the build_datasets() method
+
+    Example:
+        @dataclass
+        class S3DatasetConfig(DatasetProvider):
+            bucket_name: str
+            data_prefix: str
+            seq_length: int
+
+            def build_datasets(self, context: DatasetBuildContext) -> Tuple[Optional[Any], Optional[Any], Optional[Any]]:
+                # Custom implementation to load data from S3
+                train_ds = load_s3_dataset(self.bucket_name, f"{self.data_prefix}/train", context.tokenizer)
+                valid_ds = load_s3_dataset(self.bucket_name, f"{self.data_prefix}/valid", context.tokenizer)
+                test_ds = load_s3_dataset(self.bucket_name, f"{self.data_prefix}/test", context.tokenizer)
+                return train_ds, valid_ds, test_ds
+    """
+
+    @abstractmethod
+    def build_datasets(self, context: DatasetBuildContext) -> Tuple[Optional[Any], Optional[Any], Optional[Any]]:
+        """Build train, validation, and test datasets.
+
+        This method is called by the framework during dataset initialization.
+        Implementations should use the provided context to create appropriate
+        datasets for each split.
+
+        Args:
+            context: Build context with sample counts and tokenizer
+
+        Returns:
+            Tuple of (train_dataset, valid_dataset, test_dataset)
+            Any element can be None if that split shouldn't be created.
+
+        Raises:
+            NotImplementedError: Must be implemented by subclasses
+        """
+        pass
 
 
 @dataclass
@@ -822,6 +895,67 @@ class NVRxStragglerDetectionConfig:
                 raise ValueError("gpu_individual_perf_threshold must be between 0.0 and 1.0.")
 
 
+@dataclass
+class InProcessRestartConfig:
+    """Configuration settings for NVIDIA Resiliency Extension in-process restart functionality."""
+
+    enabled: bool = False
+    """Enable in-process restart mechanism from nvidia-resiliency-ext."""
+
+    max_iterations: Optional[int] = None
+    """Maximum number of in-process restart iterations."""
+
+    monitor_thread_interval: float = 1.0
+    """Monitoring interval (in seconds) for the monitoring thread."""
+
+    monitor_process_interval: float = 1.0
+    """Monitoring interval (in seconds) for the monitoring process."""
+
+    progress_watchdog_interval: float = 1.0
+    """Interval (in seconds) for automatic progress watchdog timestamp updates."""
+
+    heartbeat_interval: float = 30.0
+    """Monitoring interval (in seconds) for detecting unresponsive ranks."""
+
+    soft_timeout: float = 60.0
+    """Soft progress timeout (in seconds)."""
+
+    hard_timeout: float = 90.0
+    """Hard progress timeout (in seconds)."""
+
+    heartbeat_timeout: float = 60.0
+    """Timeout (in seconds) for a missing rank detection heartbeat."""
+
+    barrier_timeout: float = 120.0
+    """Timeout (in seconds) for internal distributed barrier."""
+
+    completion_timeout: float = 120.0
+    """Timeout (in seconds) for barrier on completion on all ranks."""
+
+    last_call_wait: float = 1.0
+    """Time interval (in seconds) for other ranks to report concurrent terminal failures."""
+
+    termination_grace_time: float = 1.0
+    """Interval (in seconds) between SIGTERM and SIGKILL issued on hard timeout."""
+
+    granularity: Literal["node", "rank"] = "node"
+    """Granularity for in-process restart."""
+
+    active_world_size: Optional[int] = None
+    """The number of ranks initially executing the workload.
+    The remaining ranks from the allocation are set aside as warm reserve.
+    If None, defaults to WORLD_SIZE environment variable."""
+
+    empty_cuda_cache: bool = True
+    """Empty CUDA cache during restart finalization."""
+
+    max_rank_faults: Optional[int] = None
+    """Maximum number of rank faults allowed before terminating the job."""
+
+    monitor_process_logdir: Optional[str] = None
+    """Directory for monitor process log files. If None, monitor process logging is disabled."""
+
+
 # ---------------- Container config (standalone top-level config) ----------------
 @dataclass(kw_only=True)
 class ConfigContainer(Container):
@@ -830,11 +964,11 @@ class ConfigContainer(Container):
     rng: RNGConfig = field(default_factory=RNGConfig)
     rerun_state_machine: RerunStateMachineConfig = field(default_factory=RerunStateMachineConfig)
     train: TrainingConfig
-    model: GPTModelProvider | T5ModelProvider | MambaProvider
+    model: GPTModelProvider | T5ModelProvider | MambaModelProvider
     optimizer: OptimizerConfig
     ddp: DistributedDataParallelConfig = field(default_factory=DistributedDataParallelConfig)
     scheduler: SchedulerConfig
-    dataset: GPTDatasetConfig | FinetuningDatasetConfig
+    dataset: GPTDatasetConfig | FinetuningDatasetConfig | DatasetProvider
     logger: LoggerConfig
     tokenizer: TokenizerConfig
     checkpoint: CheckpointConfig
@@ -846,6 +980,7 @@ class ConfigContainer(Container):
     peft: Optional[PEFT] = None
     comm_overlap: Optional[CommOverlapConfig] = None
     mixed_precision: Optional[Union[MixedPrecisionConfig, str]] = None
+    inprocess_restart: Optional[InProcessRestartConfig] = None
 
     def get_data_parallel_size(self, world_size: int) -> int:
         """Calculate the data parallel size based on the model configuration."""
@@ -873,6 +1008,33 @@ class ConfigContainer(Container):
         # Set data_parallel_size on comm_overlap config if present
         if self.comm_overlap is not None:
             self.comm_overlap.data_parallel_size = self.data_parallel_size
+
+    def _sync_and_validate_external_cuda_graph(self) -> None:
+        """Sync necessary configs for external CUDA Graphs and and validates it."""
+
+        # Sync config. If TE RNG tracker is set in either ways, set them in both places.
+        if self.rng.te_rng_tracker or self.model.use_te_rng_tracker:
+            self.model.use_te_rng_tracker = self.rng.te_rng_tracker = True
+
+        # Validate external_cg
+        if self.model.enable_cuda_graph or self.model.external_cuda_graph:
+            assert not self.model.enable_cuda_graph or not self.model.external_cuda_graph, (
+                "enable_cuda_graph and external_cuda_graph cannot be enabled at the same time."
+            )
+            if self.model.transformer_impl == "transformer_engine" and not (
+                self.rng.te_rng_tracker or self.model.use_te_rng_tracker
+            ):
+                self.rng.te_rng_tracker = self.model.use_te_rng_tracker = True
+                warn_rank_0("te_rng_tracker is not enabled, enabling it for CUDA graphs.")
+
+        if self.model.external_cuda_graph:
+            assert "expandable_segments:True" not in os.getenv("PYTORCH_CUDA_ALLOC_CONF", ""), (
+                "expandable_segments:True may not be safe when using CUDA Graphs with some specific parallel settings. "
+                "The training may crash with illegal memory access."
+            )
+            assert self.model.recompute_granularity != "full", (
+                "recompute_granularity must not be full when CUDA Graphs are enabled."
+            )
 
     def validate(self) -> None:
         """Performs validation checks on the combined configuration.
@@ -911,6 +1073,8 @@ class ConfigContainer(Container):
                 self.comm_overlap.data_parallel_size = self.data_parallel_size
 
         # Run validations
+        _validate_and_sync_distributed_optimizer_settings(self)
+
         if self.dist.use_megatron_fsdp and self.dist.use_torch_fsdp2:
             raise ValueError("Using use_megatron_fsdp and use_torch_fsdp2 at the same time is not supported.")
 
@@ -920,15 +1084,13 @@ class ConfigContainer(Container):
             self.dist.use_megatron_fsdp = True
             self.ddp.use_megatron_fsdp = True
 
+            assert not self.dist.use_tp_pp_dp_mapping, "use_tp_pp_dp_mapping is not supported with Megatron FSDP"
+
             if self.checkpoint.save is not None or self.checkpoint.load is not None:
                 # only check if saving or loading
                 assert self.checkpoint.ckpt_format == "fsdp_dtensor", (
                     "Megatron FSDP only supports fsdp_dtensor checkpoint format"
                 )
-
-            if self.model.gradient_accumulation_fusion:
-                print_rank_0("Gradient accumulation fusion is not supported with Megatron FSDP, setting to False")
-                self.model.gradient_accumulation_fusion = False
 
             if self.ddp.average_in_collective:
                 print_rank_0("average_in_collective is not supported with Megatron FSDP, setting to True")
@@ -970,7 +1132,7 @@ class ConfigContainer(Container):
         if self.scheduler.lr_wsd_decay_iters is not None:
             self.scheduler.wsd_decay_steps = self.scheduler.lr_wsd_decay_iters * self.train.global_batch_size
         if self.scheduler.lr_warmup_fraction is not None:
-            self.scheduler.lr_warmup_steps = self.scheduler.lr_warmup_fraction * self.scheduler.lr_decay_iters
+            self.scheduler.lr_warmup_steps = self.scheduler.lr_warmup_fraction * self.scheduler.lr_decay_steps
         else:
             self.scheduler.lr_warmup_steps = self.scheduler.lr_warmup_iters * self.train.global_batch_size
 
@@ -1050,9 +1212,7 @@ class ConfigContainer(Container):
                 data_parallel_degree = get_world_size_safe()
             self.train.val_global_batch_size = self.train.val_micro_batch_size * data_parallel_degree
 
-        assert self.ddp.use_distributed_optimizer == self.optimizer.use_distributed_optimizer, (
-            "Please ensure 'use_distributed_optimizer' setting in DistributedDataParallelConfig and OptimizerConfig matches."
-        )
+        self._sync_and_validate_external_cuda_graph()
 
 
 def runtime_config_update(cfg: ConfigContainer) -> None:
@@ -1088,3 +1248,28 @@ def runtime_config_update(cfg: ConfigContainer) -> None:
 
     # Validate configuration after all modifications
     cfg.validate()
+
+
+def _validate_and_sync_distributed_optimizer_settings(config: ConfigContainer) -> None:
+    """Validate and synchronize distributed optimizer settings between DDP and optimizer configs.
+
+    This function ensures that distributed optimizer settings are consistent across
+    DDP and optimizer configurations. If either setting is enabled, both will be
+    enabled to maintain consistency.
+
+    Args:
+        config: The configuration container to validate and potentially modify.
+    """
+    ddp_setting = config.ddp.use_distributed_optimizer
+    optimizer_setting = config.optimizer.use_distributed_optimizer
+
+    if ddp_setting or optimizer_setting:
+        if ddp_setting != optimizer_setting:
+            warn_rank_0(
+                f"Distributed optimizer settings were not in sync: "
+                f"ddp.use_distributed_optimizer={ddp_setting}, "
+                f"optimizer.use_distributed_optimizer={optimizer_setting}. "
+                f"Automatically enabling distributed optimizer for both settings."
+            )
+        config.ddp.use_distributed_optimizer = True
+        config.optimizer.use_distributed_optimizer = True
