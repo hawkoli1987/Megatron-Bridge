@@ -390,6 +390,7 @@ def evaluate_and_print_results(
         
     else:
         # Original single validation dataset logic
+        # TODO: if multiple_validation_datasets is True, iterate the evaluate function for each validation iterator
         total_loss_dict, collected_non_loss_data, timelimit = evaluate(
             state, forward_step_func, data_iterator, model, process_non_loss_data_func, config, verbose, non_loss_data_func,
             log_timing=False  # Disable per-dataset timing
@@ -415,42 +416,21 @@ def evaluate_and_print_results(
                     writer.add_scalar(
                         "{} validation ppl vs samples".format(key), ppl, state.train_state.consumed_train_samples
                     )
-    # Timelimit hit during evaluation
-    if timelimit:
-        return
-    string = f" validation loss at {prefix} | "
-    for key in total_loss_dict:
-        string += "{} value: {:.6E} | ".format(key, total_loss_dict[key].item())
-        ppl = math.exp(min(20, total_loss_dict[key].item()))
-        string += "{} PPL: {:.6E} | ".format(key, ppl)
-        
-        # write to tensorboard
-        if writer:
-            writer.add_scalar("{} validation".format(key), total_loss_dict[key].item(), state.train_state.step)
-            writer.add_scalar(
-                "{} validation vs samples".format(key),
-                total_loss_dict[key].item(),
-                state.train_state.consumed_train_samples,
-            )
-            if state.cfg.logger.log_validation_ppl_to_tensorboard:
-                writer.add_scalar("{} validation ppl".format(key), ppl, state.train_state.step)
-                writer.add_scalar(
-                    "{} validation ppl vs samples".format(key), ppl, state.train_state.consumed_train_samples
-                )
 
             if wandb_writer and is_last_rank():
                 wandb_writer.log({"{} validation".format(key): total_loss_dict[key].item()}, state.train_state.step)
                 if state.cfg.logger.log_validation_ppl_to_tensorboard:
                     wandb_writer.log({"{} validation ppl".format(key): ppl}, state.train_state.step)
-        # write to wandb
-        if wandb_writer and is_last_rank():
-            wandb_writer.log({"{} validation".format(key): total_loss_dict[key].item()}, state.train_state.step)
-            if state.cfg.logger.log_validation_ppl_to_tensorboard:
-                wandb_writer.log({"{} validation ppl".format(key): ppl}, state.train_state.step)
 
         if process_non_loss_data_func is not None and writer and is_last_rank():
             process_non_loss_data_func(collected_non_loss_data, state.train_state.step, writer)
+        if process_non_loss_data_func is not None and writer and is_last_rank():
+            process_non_loss_data_func(collected_non_loss_data, state.train_state.step, writer)
 
+        length = len(string) + 1
+        print_rank_last("-" * length)
+        print_rank_last(string)
+        print_rank_last("-" * length)
         length = len(string) + 1
         print_rank_last("-" * length)
         print_rank_last(string)

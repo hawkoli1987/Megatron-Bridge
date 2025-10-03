@@ -19,6 +19,8 @@ import torch
 from megatron.core import mpu
 # The blend, consisting of a list of dataset prefixes and optionally a list of dataset weights, 
 # e.g. [["path/to/dataset_1_prefix", "path/to/dataset_2_prefix"], [30.0, 70.0]].
+# The blend, consisting of a list of dataset prefixes and optionally a list of dataset weights, 
+# e.g. [["path/to/dataset_1_prefix", "path/to/dataset_2_prefix"], [30.0, 70.0]].
 from megatron.core.datasets.utils import get_blend_from_list
 from megatron.core.rerun_state_machine import RerunDataIterator
 from torch.utils.data import DataLoader
@@ -211,6 +213,80 @@ def build_train_valid_test_data_loaders(
         data_parallel_rank=mpu.get_data_parallel_rank(),
         data_parallel_size=mpu.get_data_parallel_world_size(),
     )
+    
+    # Handle multiple validation datasets
+    if hasattr(cfg.dataset, 'multiple_validation_sets') and cfg.dataset.multiple_validation_sets and isinstance(valid_ds, list):
+        # Multiple validation datasets - create a list of dataloaders
+        valid_dataloader = []
+        for i, valid_dataset in enumerate(valid_ds):
+            if valid_dataset is not None:
+                if cfg.train.skip_train:
+                    valid_dl = build_pretraining_data_loader(
+                        valid_dataset,
+                        0,
+                        cfg.dataset.dataloader_type,
+                        cfg.train.val_micro_batch_size,
+                        cfg.dataset.val_num_workers,
+                        cfg.dataset.data_sharding,
+                        worker_init_fn=maybe_worker_init_fn,
+                        collate_fn=valid_dataset.collate_fn if hasattr(valid_dataset, "collate_fn") else None,
+                        pin_memory=cfg.dataset.val_pin_memory,
+                        persistent_workers=cfg.dataset.val_persistent_workers,
+                        data_parallel_rank=mpu.get_data_parallel_rank(),
+                        data_parallel_size=mpu.get_data_parallel_world_size(),
+                    )
+                else:
+                    valid_dl = build_pretraining_data_loader(
+                        valid_dataset,
+                        train_state.consumed_valid_samples,
+                        "cyclic",
+                        cfg.train.val_micro_batch_size,
+                        cfg.dataset.val_num_workers,
+                        cfg.dataset.data_sharding,
+                        worker_init_fn=maybe_worker_init_fn,
+                        collate_fn=valid_dataset.collate_fn if hasattr(valid_dataset, "collate_fn") else None,
+                        pin_memory=cfg.dataset.val_pin_memory,
+                        persistent_workers=cfg.dataset.val_persistent_workers,
+                        data_parallel_rank=mpu.get_data_parallel_rank(),
+                        data_parallel_size=mpu.get_data_parallel_world_size(),
+                    )
+                valid_dataloader.append(valid_dl)
+            else:
+                valid_dataloader.append(None)
+    else:
+        # Single validation dataset - original logic
+        # offline evaluation
+        if cfg.train.skip_train:
+            valid_dataloader = build_pretraining_data_loader(
+                valid_ds,
+                0,
+                cfg.dataset.dataloader_type,
+                cfg.train.val_micro_batch_size,
+                cfg.dataset.val_num_workers,
+                cfg.dataset.data_sharding,
+                worker_init_fn=maybe_worker_init_fn,
+                collate_fn=valid_ds.collate_fn if hasattr(valid_ds, "collate_fn") else None,
+                pin_memory=cfg.dataset.val_pin_memory,
+                persistent_workers=cfg.dataset.val_persistent_workers,
+                data_parallel_rank=mpu.get_data_parallel_rank(),
+                data_parallel_size=mpu.get_data_parallel_world_size(),
+            )
+        else:
+            # online evaluation
+            valid_dataloader = build_pretraining_data_loader(
+                valid_ds,
+                train_state.consumed_valid_samples,
+                "cyclic",
+                cfg.train.val_micro_batch_size,
+                cfg.dataset.val_num_workers,
+                cfg.dataset.data_sharding,
+                worker_init_fn=maybe_worker_init_fn,
+                collate_fn=valid_ds.collate_fn if hasattr(valid_ds, "collate_fn") else None,
+                pin_memory=cfg.dataset.val_pin_memory,
+                persistent_workers=cfg.dataset.val_persistent_workers,
+                data_parallel_rank=mpu.get_data_parallel_rank(),
+                data_parallel_size=mpu.get_data_parallel_world_size(),
+            )
     
     # Handle multiple validation datasets
     if hasattr(cfg.dataset, 'multiple_validation_sets') and cfg.dataset.multiple_validation_sets and isinstance(valid_ds, list):
