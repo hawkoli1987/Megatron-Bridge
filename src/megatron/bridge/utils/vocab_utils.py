@@ -22,7 +22,7 @@ def calculate_padded_vocab_size(
     vocab_size: int,
     make_vocab_size_divisible_by: int,
     tensor_model_parallel_size: int,
-    logging_enabled: bool = True,
+    logging_enabled: bool = False,
 ) -> int:
     """Calculate padded vocab size for tensor parallelism.
 
