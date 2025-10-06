@@ -12,9 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import time
-import math
 import inspect
+import math
+import time
 from collections import defaultdict
 from datetime import datetime
 from functools import partial
@@ -57,15 +57,15 @@ except ImportError:
 
 
 MEMORY_KEYS = {
-    'allocated_bytes.all.current': 'current_allocated_mem',
-    'active_bytes.all.current': 'current_active_mem',
-    'inactive_split_bytes.all.current': 'current_inactive_mem',
-    'reserved_bytes.all.current': 'current_reserved_mem',
-    'allocated_bytes.all.peak': 'peak_allocated_mem',
-    'active_bytes.all.peak': 'peak_active_mem',
-    'inactive_split_bytes.all.peak': 'peak_inactive_mem',
-    'reserved_bytes.all.peak': 'peak_reserved_mem',
-    'num_alloc_retries': 'alloc_retries',
+    "allocated_bytes.all.current": "current_allocated_mem",
+    "active_bytes.all.current": "current_active_mem",
+    "inactive_split_bytes.all.current": "current_inactive_mem",
+    "reserved_bytes.all.current": "current_reserved_mem",
+    "allocated_bytes.all.peak": "peak_allocated_mem",
+    "active_bytes.all.peak": "peak_active_mem",
+    "inactive_split_bytes.all.peak": "peak_inactive_mem",
+    "reserved_bytes.all.peak": "peak_reserved_mem",
+    "num_alloc_retries": "alloc_retries",
 }
 
 
@@ -451,7 +451,7 @@ def training_log(
                     writer.add_scalar(metric, value, iteration)
         if logger_config.log_memory_to_wandb or logger_config.log_memory_to_tensorboard:
             memory_report = report_memory(memory_keys=logger_config.memory_keys)
-            memory_report = {f'memory/{mem_stat}': val for (mem_stat, val) in memory_report.items()}
+            memory_report = {f"memory/{mem_stat}": val for (mem_stat, val) in memory_report.items()}
             if wandb_writer and logger_config.log_memory_to_wandb:
                 wandb_writer.log(memory_report, iteration)
             if logger_config.log_memory_to_tensorboard:
@@ -686,13 +686,13 @@ def report_memory(memory_keys: Optional[dict[str, str]]) -> dict:
     for torch_name, name in memory_keys.items():
         if torch_name in memory_stats:
             # Convert to gigabytes
-            if 'bytes' in torch_name:
+            if "bytes" in torch_name:
                 gigabytes = memory_stats[torch_name] / 1.0e9
                 # Round to preserve 5 significant digits
                 if gigabytes != 0:
                     order_of_magnitude = int(math.floor(math.log10(abs(gigabytes))))
                     gigabytes = round(gigabytes, -order_of_magnitude + 4)
-                memory_report[name.replace('bytes', 'gigabytes')] = gigabytes
+                memory_report[name.replace("bytes", "gigabytes")] = gigabytes
             else:
                 memory_report[name] = memory_stats[torch_name]
 
@@ -730,15 +730,15 @@ def report_l2_norm_grad(model: Union[MegatronModule, list[MegatronModule]]) -> d
             if p.main_grad is not None and p.requires_grad:
 
                 # Always log grad norm as a default metric if it's not specified
-                if f'l2_norm/grad/{name}' not in optimizer_metrics:
+                if f"l2_norm/grad/{name}" not in optimizer_metrics:
                     param_grad_norm = torch.linalg.vector_norm(p.main_grad)
-                    optimizer_metrics[f'l2_norm/grad/{name}'] = param_grad_norm
+                    optimizer_metrics[f"l2_norm/grad/{name}"] = param_grad_norm
 
         for metric in optimizer_metrics:
-            if metric.startswith('l2_norm/grad'):
+            if metric.startswith("l2_norm/grad"):
                 norm += optimizer_metrics[metric] ** 2
 
-        optimizer_metrics['l2_norm/grad/global'] = norm**0.5
+        optimizer_metrics["l2_norm/grad/global"] = norm**0.5
 
         for metric in optimizer_metrics:
             if isinstance(optimizer_metrics[metric], torch.Tensor):
@@ -748,11 +748,7 @@ def report_l2_norm_grad(model: Union[MegatronModule, list[MegatronModule]]) -> d
 
 
 def report_runtime(
-    train_state: TrainState,
-    start_time: int,
-    seq_length: int,
-    train_iters: int,
-    time_unit: str = 'seconds'
+    train_state: TrainState, start_time: int, seq_length: int, train_iters: int, time_unit: str = "seconds"
 ) -> dict:
     """
     Estimates total training time.
@@ -785,13 +781,13 @@ def report_runtime(
     elapsed_dur = train_state.step / train_iters
 
     divider = 1
-    if time_unit == 'seconds':
+    if time_unit == "seconds":
         divider = 1
-    elif time_unit == 'minutes':
+    elif time_unit == "minutes":
         divider = 60
-    elif time_unit == 'hours':
+    elif time_unit == "hours":
         divider = 60 * 60
-    elif time_unit == 'days':
+    elif time_unit == "days":
         divider = 60 * 60 * 24
     else:
         raise ValueError(
@@ -802,19 +798,19 @@ def report_runtime(
     elapsed_time = time.time() - start_time
     rate = elapsed_time / elapsed_dur
     remaining_time = rate * (1 - elapsed_dur)
-    time_metrics['time/remaining_estimate'] = remaining_time / divider
+    time_metrics["time/remaining_estimate"] = remaining_time / divider
 
-    time_metrics['time/tokens'] = train_state.consumed_train_samples * seq_length
-    time_metrics['time/samples'] = train_state.consumed_train_samples
-    time_metrics['time/batches'] = train_state.step
-    time_metrics['time/total'] = (time.time() - start_time) / divider
+    time_metrics["time/tokens"] = train_state.consumed_train_samples * seq_length
+    time_metrics["time/samples"] = train_state.consumed_train_samples
+    time_metrics["time/batches"] = train_state.step
+    time_metrics["time/total"] = (time.time() - start_time) / divider
 
     return time_metrics
 
 
 def report_throughput(
     train_config: TrainingConfig,
-    iteration: int, 
+    iteration: int,
     seq_length: int,
     history_wct: list,
     window_size: int,
@@ -848,7 +844,7 @@ def report_throughput(
     +-------------------------------------+-----------------------------------------------------------+
     Args:
         train_config (TrainingConfig): model train config.
-        iteration (int): current train iteration. 
+        iteration (int): current train iteration.
         seq_length (int): model sequence length.
         history_wct (list): list of elapsed time per each iteration.
         window_size (int, optional): Number of batches to use for a rolling average of throughput.
@@ -869,18 +865,18 @@ def report_throughput(
         dev_batches_per_sec = batches_per_sec / world_size
         dev_samples_per_sec = samples_per_sec / world_size
         metrics = {
-            'throughput/batches_per_sec': batches_per_sec,
-            'throughput/samples_per_sec': samples_per_sec,
-            'throughput/device/batches_per_sec': dev_batches_per_sec,
-            'throughput/device/samples_per_sec': dev_samples_per_sec,
-            'throughput/micro_batch_size': train_config.micro_batch_size,
-            'throughput/global_batch_size': train_config.global_batch_size,
+            "throughput/batches_per_sec": batches_per_sec,
+            "throughput/samples_per_sec": samples_per_sec,
+            "throughput/device/batches_per_sec": dev_batches_per_sec,
+            "throughput/device/samples_per_sec": dev_samples_per_sec,
+            "throughput/micro_batch_size": train_config.micro_batch_size,
+            "throughput/global_batch_size": train_config.global_batch_size,
         }
         if elapsed_tokens > 0:
             tokens_per_sec = elapsed_tokens / elapsed_wct
             dev_tokens_per_sec = tokens_per_sec / world_size
-            metrics.update({'throughput/tokens_per_sec': tokens_per_sec})
-            metrics.update({'throughput/device/tokens_per_sec': dev_tokens_per_sec})
+            metrics.update({"throughput/tokens_per_sec": tokens_per_sec})
+            metrics.update({"throughput/device/tokens_per_sec": dev_tokens_per_sec})
 
         return metrics
 
