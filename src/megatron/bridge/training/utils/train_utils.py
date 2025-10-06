@@ -565,7 +565,7 @@ def training_log(
             if writer:
                 writer.add_scalar("throughput/tflops/device", per_gpu_tf, iteration)
                 writer.add_scalar("throughput/tflops", per_gpu_tf * get_world_size_safe(), iteration)
-        
+
         if logger_config.log_throughput_to_wandb:
             if wandb_writer:
                 wandb_writer.log({"throughput/tflops/device": per_gpu_tf}, iteration)
@@ -728,7 +728,6 @@ def report_l2_norm_grad(model: Union[MegatronModule, list[MegatronModule]]) -> d
     for model_chunk in model:
         for name, p in model_chunk.named_parameters():
             if p.main_grad is not None and p.requires_grad:
-
                 # Always log grad norm as a default metric if it's not specified
                 if f"l2_norm/grad/{name}" not in optimizer_metrics:
                     param_grad_norm = torch.linalg.vector_norm(p.main_grad)
@@ -743,7 +742,7 @@ def report_l2_norm_grad(model: Union[MegatronModule, list[MegatronModule]]) -> d
         for metric in optimizer_metrics:
             if isinstance(optimizer_metrics[metric], torch.Tensor):
                 optimizer_metrics[metric] = optimizer_metrics[metric].item()
-    
+
     return optimizer_metrics
 
 
