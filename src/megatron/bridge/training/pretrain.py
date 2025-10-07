@@ -136,31 +136,31 @@ def _pretrain(
 
     iteration = state.train_state.step
 
-    # Final VALIDATION
-    if state.train_state.do_valid:
-        prefix = f"iteration {iteration} on validation set"
-        evaluate_and_print_results(
-            state,
-            prefix,
-            forward_step_func,
-            valid_data_iterator,
-            model,
-            config.model,
-            verbose=True,
-            write_to_tensorboard=not config.train.skip_train,
-        )
-    # Final TESTING
-    if state.train_state.do_test:
-        prefix = f"iteration {iteration} on test set"
-        evaluate_and_print_results(
-            state,
-            prefix,
-            forward_step_func,
-            test_data_iterator,
-            model,
-            config.model,
-            verbose=True,
-            write_to_tensorboard=not config.train.skip_train,
-        )
+    # # Final VALIDATION
+    # if state.train_state.do_valid:
+    #     prefix = f"iteration {iteration} on validation set"
+    #     evaluate_and_print_results(
+    #         state,
+    #         prefix,
+    #         forward_step_func,
+    #         valid_data_iterator,
+    #         model,
+    #         config.model,
+    #         verbose=True,
+    #         write_to_tensorboard=not config.train.skip_train,
+    #     )
+    # # Final TESTING
+    # if state.train_state.do_test:
+    #     prefix = f"iteration {iteration} on test set"
+    #     evaluate_and_print_results(
+    #         state,
+    #         prefix,
+    #         forward_step_func,
+    #         test_data_iterator,
+    #         model,
+    #         config.model,
+    #         verbose=True,
+    #         write_to_tensorboard=not config.train.skip_train,
+    #     )
 
     _finish_train(state)
