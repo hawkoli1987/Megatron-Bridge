@@ -203,6 +203,9 @@ class _HuggingFaceTokenizer(MegatronTokenizer):
     @property
     def eod(self):
         """Returns the end-of-document token ID."""
+        # Use swapped EOS token if dataset config enables it
+        if getattr(self, '_swap_eos_token', False):
+            return 151643
         return self._tokenizer.eos_token_id
 
     @property
@@ -213,6 +216,9 @@ class _HuggingFaceTokenizer(MegatronTokenizer):
     @property
     def eos(self):
         """Returns the end-of-sentence token ID."""
+        # Use swapped EOS token if dataset config enables it
+        if getattr(self, '_swap_eos_token', False):
+            return 151643
         return self._tokenizer.eos_token_id
 
     @property
