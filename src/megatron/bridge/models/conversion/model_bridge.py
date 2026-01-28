@@ -614,7 +614,9 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
 
         # Use provided conversion tasks or build them
         if conversion_tasks is None:
-            conversion_tasks = self.build_conversion_tasks(hf_pretrained, megatron_model)
+            conversion_tasks = self.build_conversion_tasks(
+                hf_pretrained, megatron_model, ignore_missing_hf_keys=True
+            )
 
         megatron_to_hf_tasks = conversion_tasks
         model_config = unwrap_model(megatron_model)[0].config
@@ -814,6 +816,7 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
         self,
         hf_pretrained: HFPreTrained,
         megatron_model: List[MegatronModel],
+        ignore_missing_hf_keys: bool = False,
     ) -> List[None | WeightConversionTask]:
         """Construct the conversion tasks between HF and megatron.
 
@@ -865,7 +868,7 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
                     continue
 
                 # ensure hf weights exist
-                if not mapping.allow_hf_name_mismatch:
+                if not ignore_missing_hf_keys and not mapping.allow_hf_name_mismatch:
                     if isinstance(mapping.hf_param, str):
                         if mapping.hf_param not in hf_keys:
                             logger.warning(f"WARNING: Can't find {mapping.hf_param} in hf_keys")
