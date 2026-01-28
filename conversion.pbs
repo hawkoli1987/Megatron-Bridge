@@ -1,0 +1,52 @@
+#!/bin/bash
+#PBS -N qwen3_4b_mtp_conversion
+#PBS -q AISG_debug
+#PBS -l select=1:ngpus=1
+#PBS -l walltime=0:30:00
+#PBS -j oe
+
+set -e
+
+export SCRATCH_DIR="/scratch_aisg/SPEC-SF-AISG"
+export BRIDGE_REPO="${SCRATCH_DIR}/hieu/Megatron-Bridge"
+export MEGATRON_REPO="${SCRATCH_DIR}/hieu/Megatron-LM"
+
+
+# Paths for Conversion
+MEGATRON_CKPT_PATH="${SCRATCH_DIR}/checkpoint_mb/mtp/mtp-q3-4b-gbs32-lr1e-3/mb/iter_0007629/"
+OUTPUT_HF_DIR="${BRIDGE_REPO}/qwen3_4b_mtp_hf"
+
+LOCAL_HF_MODEL_DIR="${BRIDGE_REPO}/qwen3_4b_mtp"
+
+export SQSH_DIR="${SCRATCH_DIR}/sqsh/nemo_25_11.sqsh"
+export CONTAINER_NAME="hf_convert_${PBS_JOBID%%.*}"
+export ENROOT_DATA_PATH="${SCRATCH_DIR}/hieu/enroot_data"
+export ENROOT_RUNTIME_PATH="${SCRATCH_DIR}/hieu/enroot_runtime"
+
+echo "Creating Container..."
+enroot create --name "${CONTAINER_NAME}" "${SQSH_DIR}"
+
+BASH_CMD="
+mkdir -p ${OUTPUT_HF_DIR} && \
+cd /opt/Megatron-Bridge && \
+python examples/conversion/convert_checkpoints.py export \
+    --hf-model ${LOCAL_HF_MODEL_DIR} \
+    --megatron-path ${MEGATRON_CKPT_PATH} \
+    --hf-path ${OUTPUT_HF_DIR} \
+    --trust-remote-code \
+"
+
+echo "Launching Conversion..."
+enroot start --root --rw \
+    -m ${BRIDGE_REPO}:/opt/Megatron-Bridge \
+    -m ${MEGATRON_REPO}:/opt/megatron-lm \
+    -m ${SCRATCH_DIR}:${SCRATCH_DIR} \
+    -e PYTHONPATH=/opt/Megatron-Bridge/src:/opt/megatron-lm \
+    -e http_proxy -e https_proxy -e no_proxy \
+    -e HTTP_PROXY -e HTTPS_PROXY -e NO_PROXY \
+    "${CONTAINER_NAME}" \
+    bash -c "${BASH_CMD}"
+
+echo "Cleaning up..."
+enroot remove -f "${CONTAINER_NAME}"
+echo "Done."
