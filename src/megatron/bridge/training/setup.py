@@ -329,28 +329,38 @@ def _create_hf_loading_hook(cfg: ConfigContainer, state: GlobalState) -> Callabl
     """
     def hf_loading_hook(model: list[MegatronModule]) -> list[MegatronModule]:
         """Pre-wrap hook that loads HuggingFace weights into Megatron model.
-        
         Args:
             model: List of base model modules before distributed wrapping
-            
         Returns:
             List of model modules with HuggingFace weights loaded
         """
         from megatron.bridge.models.conversion.auto_bridge import AutoBridge
-        
         hf_path = cfg.checkpoint.hf_pretrained_checkpoint
         print_rank_0(f"Loading HuggingFace weights from: {hf_path}")
-        
         # Start timing
         state.timers("load-hf-weights", log_level=0).start(barrier=True)
-        
-        # Create AutoBridge for the HuggingFace model
-        model = AutoBridge.from_hf_pretrained(hf_path, trust_remote_code=True)
-        
-        print_rank_0("Successfully loaded HuggingFace weights into Megatron model")
-        
+        try:
+            print_rank_0(f"Creating lazy PreTrainedCausalLM loader for {hf_path}...")
+            hf_pretrained_loader = PreTrainedCausalLM.from_pretrained(
+                hf_path,
+                device="cpu",
+                torch_dtype=cfg.model.params_dtype,
+                trust_remote_code=True
+            )
+            # Create AutoBridge for the HuggingFace model
+            print_rank_0(f"Creating AutoBridge from config...")
+            bridge = AutoBridge.from_hf_config(hf_pretrained_loader.config)
+            megatron_model_list = model
+            internal_model_bridge = bridge._model_bridge
+            internal_model_bridge.load_weights_hf_to_megatron(
+                hf_pretrained_loader,
+                megatron_model_list
+            )
+            print_rank_0("Successfully loaded HuggingFace weights into Megatron model.")
+        except Exception as e:
+            print_rank_0(f"Failed to load HuggingFace weights: {e}")
+        state.timers("load-hf-weights", log_level=0).stop(barrier=True)    
         return model
-    
     return hf_loading_hook
 
 
@@ -368,7 +378,7 @@ def _create_non_mtp_freezing_hook(cfg: ConfigContainer) -> Callable[[list[Megatr
     """
     def non_mtp_freezing_hook(model: list[MegatronModule]) -> list[MegatronModule]:
         """Pre-wrap hook that freezes all layers except MTP modules.
-        
+
         Args:
             model: List of base model modules before distributed wrapping
             
@@ -376,18 +386,18 @@ def _create_non_mtp_freezing_hook(cfg: ConfigContainer) -> Callable[[list[Megatr
             List of model modules with non-MTP layers frozen
         """
         print_rank_0("Applying non-MTP freezing pre-wrap hook...")
-        
+
         # MTP module pattern to keep unfrozen
         mtp_pattern = 'mtp.'
-        
+
         frozen_count = 0
         unfrozen_count = 0
-        
+
         for model_module in model:
             for name, param in model_module.named_parameters():
                 # Check if this parameter belongs to MTP modules
                 is_mtp_param = mtp_pattern in name
-                
+
                 if is_mtp_param:
                     # Keep MTP parameters trainable
                     param.requires_grad = True
@@ -399,13 +409,11 @@ def _create_non_mtp_freezing_hook(cfg: ConfigContainer) -> Callable[[list[Megatr
                     frozen_count += 1
                     if frozen_count <= 10:  # Only print first 10 for brevity
                         print_rank_0(f"Frozen parameter: {name}")
-        
+
         print_rank_0(f"Non-MTP freezing completed:")
         print_rank_0(f"  Frozen parameters: {frozen_count}")
         print_rank_0(f"  Unfrozen MTP parameters: {unfrozen_count}")
-        
         return model
-    
     return non_mtp_freezing_hook
 
 

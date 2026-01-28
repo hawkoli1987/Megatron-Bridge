@@ -60,6 +60,12 @@ from typing import Optional
 import torch
 
 from megatron.bridge import AutoBridge
+from transformers import AutoConfig, AutoModelForCausalLM
+
+try:
+    from megatron.bridge.models.qwen.qwen3_mtp_bridge import Qwen3MTPBridge
+except ImportError:
+    print("Qwen3MTPBridge not found. MTP conversion will fail.")
 
 
 def validate_path(path: str, must_exist: bool = False) -> Path:
@@ -136,70 +142,51 @@ def import_hf_to_megatron(
                 print(f"   📄 {item.name}")
 
 
+# Modify the following function as such
 def export_megatron_to_hf(
     hf_model: str,
     megatron_path: str,
     hf_path: str,
     show_progress: bool = True,
+    trust_remote_code: bool = False,
 ) -> None:
-    """
-    Export a Megatron checkpoint to HuggingFace format.
-
-    Args:
-        megatron_path: Directory path where the Megatron checkpoint is stored
-        hf_path: Directory path where the HuggingFace model will be saved
-        show_progress: Display progress bar during weight export
-    """
     print(f"🔄 Starting export: {megatron_path} -> {hf_path}")
-
     # Validate megatron checkpoint exists
     checkpoint_path = validate_path(megatron_path, must_exist=True)
-    print(f"📂 Found Megatron checkpoint: {checkpoint_path}")
-
-    # Look for configuration files to determine the model type
-    config_files = list(checkpoint_path.glob("**/run_config.yaml"))
-    if not config_files:
-        # Look in iter_ subdirectories
-        iter_dirs = [d for d in checkpoint_path.iterdir() if d.is_dir() and d.name.startswith("iter_")]
-        if iter_dirs:
-            # Use the latest iteration
-            latest_iter = max(iter_dirs, key=lambda d: int(d.name.replace("iter_", "")))
-            config_files = list(latest_iter.glob("run_config.yaml"))
-
-    if not config_files:
-        raise FileNotFoundError(
-            f"Could not find run_config.yaml in {checkpoint_path}. Please ensure this is a valid Megatron checkpoint."
-        )
-
-    print(f"📋 Found configuration: {config_files[0]}")
-
-    # For demonstration, we'll create a bridge from a known config
-    # This would typically be extracted from the checkpoint metadata
-    bridge = AutoBridge.from_hf_pretrained(hf_model)
-
-    # Export using the convenience method
+    # Custom Model Loading & Registration
+    dummy_model = None
+    if trust_remote_code:
+        print(f"📥 Loading target HF model config from: {hf_model}")
+        try:
+            # Load config
+            config = AutoConfig.from_pretrained(hf_model, trust_remote_code=True)
+            with torch.device("meta"):
+                dummy_model = AutoModelForCausalLM.from_config(config, trust_remote_code=True)
+            model_class = type(dummy_model)
+            print(f"✅ Detected Custom Class: {model_class.__name__}")
+            # Register the bridge
+            if "Qwen3MTPBridge" in globals():
+                Qwen3MTPBridge.register_for_custom_class(model_class)
+                print(f"🔗 Registered Qwen3MTPBridge for {model_class.__name__}")
+        except Exception as e:
+            print(f"⚠️ Failed to pre-load custom class: {e}")
+    # Create the Bridge
+    bridge = AutoBridge.from_hf_pretrained(hf_model, trust_remote_code=trust_remote_code)
+    # Monkey-Patch for New Architecture by injecting keys from dummy_model
+    if dummy_model is not None:
+        try:
+            print("🛠️   Patching bridge (ignoring missing weights on disk)...")
+            bridge.hf_pretrained.state.source.get_all_keys = lambda: list(dummy_model.state_dict().keys())
+        except Exception as e:
+            print(f"⚠️ Failed to patch state source: {e}")
+    # Run Export
     print("📤 Exporting to HuggingFace format...")
     bridge.export_ckpt(
         megatron_path=megatron_path,
         hf_path=hf_path,
         show_progress=show_progress,
     )
-
     print(f"✅ Successfully exported model to: {hf_path}")
-
-    # Verify the export was created
-    export_path = Path(hf_path)
-    if export_path.exists():
-        print("📁 Export structure:")
-        for item in export_path.iterdir():
-            if item.is_dir():
-                print(f"   📂 {item.name}/")
-            else:
-                print(f"   📄 {item.name}")
-
-    print("🔍 You can now load this model with:")
-    print("   from transformers import AutoModelForCausalLM")
-    print(f"   model = AutoModelForCausalLM.from_pretrained('{hf_path}')")
 
 
 def main():
@@ -232,6 +219,7 @@ def main():
         "--hf-path", required=True, help="Directory path where the HuggingFace model will be saved"
     )
     export_parser.add_argument("--no-progress", action="store_true", help="Disable progress bar during export")
+    export_parser.add_argument("--trust-remote-code", action="store_true", help="Allow custom model code")
 
     args = parser.parse_args()
 
@@ -254,6 +242,7 @@ def main():
             megatron_path=args.megatron_path,
             hf_path=args.hf_path,
             show_progress=not args.no_progress,
+            trust_remote_code=args.trust_remote_code,
         )
     else:
         raise RuntimeError(f"Unknown command: {args.command}")
