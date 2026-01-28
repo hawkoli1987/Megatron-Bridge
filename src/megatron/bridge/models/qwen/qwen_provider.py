@@ -244,6 +244,7 @@ class Qwen3ModelProvider(GPTModelProvider):
     add_qkv_bias: bool = False
     qk_layernorm: bool = True
     kv_channels: Optional[int] = 128
+    linear_attention_type: Optional[str] = None
     num_query_groups: int = 8
     seq_length: int = 40960
     init_method_std: int = 0.02
