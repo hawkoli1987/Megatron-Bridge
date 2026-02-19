@@ -195,10 +195,24 @@ class DataloaderConfig:
     trust_remote_code: Optional[bool] = None
     """Whether remote code execution should be trusted for a given HF path."""
 
+    val_num_workers: Optional[int] = None
+    """Validation dataloader number of workers. If None, uses num_workers."""
+
+    val_pin_memory: Optional[bool] = None
+    """Whether to pin memory for validation data loading. If None, uses pin_memory."""
+
+    val_persistent_workers: Optional[bool] = None
+    """Whether to keep validation data loading workers persistent. If None, uses persistent_workers."""
+
     def finalize(self):
         """Finalize dataloader config field constraints."""
         if self.num_workers == 0 and self.persistent_workers:
             self.persistent_workers = False
+        self.val_num_workers = self.val_num_workers if self.val_num_workers is not None else self.num_workers
+        self.val_pin_memory = self.val_pin_memory if self.val_pin_memory is not None else self.pin_memory
+        self.val_persistent_workers = (
+            self.val_persistent_workers if self.val_persistent_workers is not None else self.persistent_workers
+        )
 
 
 @dataclass(frozen=True)
@@ -374,6 +388,7 @@ class GPTDatasetConfig(MCoreGPTDatasetConfig, DataloaderConfig):
         skip_getting_attention_mask_from_dataset: bool = True,
         data_path: str | list[str] | None = None,
         per_dataset_sequences_path: str | None = None,
+        multiple_validation_sets: bool = False,
         *args,
         **kwargs,
     ):
@@ -385,6 +400,8 @@ class GPTDatasetConfig(MCoreGPTDatasetConfig, DataloaderConfig):
             data_path: CLI-friendly data path(s). Converted to ``blend`` in ``finalize()``.
             per_dataset_sequences_path: Path to a JSON file with precomputed sequence/document
                 counts per dataset.  Converted to ``sequences_per_dataset`` in ``finalize()``.
+            multiple_validation_sets (bool): if True, validation datasets are kept separate
+                instead of blended, enabling per-dataset loss tracking.
         """
         self.skip_getting_attention_mask_from_dataset = skip_getting_attention_mask_from_dataset
         self.data_path = data_path
@@ -398,6 +415,7 @@ class GPTDatasetConfig(MCoreGPTDatasetConfig, DataloaderConfig):
         dataloader_kwargs = {k: kwargs.pop(k) for k in list(kwargs) if k in DataloaderConfig.__dataclass_fields__}
         MCoreGPTDatasetConfig.__init__(self, *args, **kwargs)
         DataloaderConfig.__init__(self, **dataloader_kwargs)
+        self.multiple_validation_sets = multiple_validation_sets
 
     def __post_init__(self) -> None:
         """Skip MCore post_init during initial construction.
@@ -699,6 +717,10 @@ class LoggerConfig(MTrainLoggerConfig):
     2: report timing for operations that migh be executed numerous times during each iteration.
     Note that setting the level to 1 or 2 might cause increase in iteration time.
     """
+
+    multiple_validation_sets_use_dataset_name: bool = True
+    """When logging multiple validation set results, use the dataset basename
+    instead of the full path as the metric label."""
 
     mlflow_experiment: Optional[str] = None
     """The MLFlow experiment name."""
