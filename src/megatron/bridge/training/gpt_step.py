@@ -148,6 +148,11 @@ def get_batch_from_iterator(
         if is_last_pp_stage:
             required_device_keys.update(("labels", "loss_mask"))
 
+    _passthrough_device_keys = {"rho_mask"}
+    for key in _passthrough_device_keys:
+        if key in batch and batch[key] is not None:
+            required_device_keys.add(key)
+
     _batch_required_keys = {}
     for key, val in batch.items():
         if key in required_device_keys:
@@ -173,6 +178,7 @@ def get_batch(
     torch.Tensor,
     torch.Tensor | None,
     torch.Tensor | None,
+    torch.Tensor | None,
 ]:
     """Generate a batch.
 
@@ -183,8 +189,8 @@ def get_batch(
 
     Returns:
         tuple of tensors containing tokens, labels, loss_mask, attention_mask, position_ids,
-        cu_seqlens, cu_seqlens_argmin, max_seqlen, cu_seqlens_unpadded, and
-        cu_seqlens_unpadded_argmin
+        cu_seqlens, cu_seqlens_argmin, max_seqlen, cu_seqlens_unpadded,
+        cu_seqlens_unpadded_argmin, and rho_mask
     """
     # Determine pipeline stage role via process group collection
     is_first = is_pp_first_stage(pg_collection.pp)
@@ -192,7 +198,7 @@ def get_batch(
     is_middle = (not is_first) and (not is_last)
     include_full_batch_fields = is_middle and _middle_pp_stage_needs_batch(cfg)
     if is_middle and not include_full_batch_fields:
-        return None, None, None, None, None, None, None, None, None, None
+        return None, None, None, None, None, None, None, None, None, None, None
 
     batch = get_batch_from_iterator(
         data_iterator,
@@ -224,6 +230,7 @@ def get_batch(
         batch.get("max_seqlen"),
         batch.get("cu_seqlens_unpadded"),
         batch.get("cu_seqlens_unpadded_argmin"),
+        batch.get("rho_mask"),
     )
 
 
@@ -261,8 +268,12 @@ def _forward_step_common(
             max_seqlen,
             cu_seqlens_unpadded,
             cu_seqlens_unpadded_argmin,
+            rho_mask,
         ) = get_batch(data_iterator, state.cfg, use_mtp, pg_collection=pg_collection)
     timers("batch-generator").stop()
+
+    if rho_mask is not None and getattr(state.cfg.train, "rho_masking", False):
+        loss_mask = loss_mask * rho_mask.float()
 
     forward_args = {
         "input_ids": tokens,

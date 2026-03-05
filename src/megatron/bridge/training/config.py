@@ -575,6 +575,15 @@ class TrainingConfig(MTrainTrainingConfig):
     skip_sync_grad_norm_across_mp: bool = False
     """Skips syncing the grad norm across the model parallel group."""
 
+    # ---------------- Rho-loss masking ----------------
+
+    rho_masking: bool = False
+    """Apply a pre-computed rho-loss binary mask during training.
+    The mask is loaded per-sample from the memmap at rho_mask_path."""
+
+    rho_mask_path: str | None = None
+    """Path to the .rho_mask.bin uint8 memmap file (sample-indexed)."""
+
     # ---------------- Validation config. ----------------
 
     eval_iters: int | None = None
