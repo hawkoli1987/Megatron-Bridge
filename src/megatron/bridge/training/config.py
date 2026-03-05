@@ -584,6 +584,13 @@ class TrainingConfig(MTrainTrainingConfig):
     rho_mask_path: str | None = None
     """Path to the .rho_mask.bin uint8 memmap file (sample-indexed)."""
 
+    rho_filtering: bool = False
+    """Filter training sequences based on pre-computed rho-loss indices.
+    Only sequences listed in the .npy file at rho_filter_path are used."""
+
+    rho_filter_path: str | None = None
+    """Path to the .npy int64 index array of kept sample indices."""
+
     # ---------------- Validation config. ----------------
 
     eval_iters: int | None = None

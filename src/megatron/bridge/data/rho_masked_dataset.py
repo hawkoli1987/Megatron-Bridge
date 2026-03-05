@@ -26,6 +26,7 @@ class RhoMaskedGPTDataset(Dataset):
 
         total_entries = os.path.getsize(mask_path)  # uint8 → 1 byte each
         self._mask = np.memmap(mask_path, dtype=np.uint8, mode="r", shape=(total_entries,))
+        self._num_annotated_samples = total_entries // seq_length
 
     def __len__(self):
         return len(self.inner)
@@ -33,11 +34,15 @@ class RhoMaskedGPTDataset(Dataset):
     def __getitem__(self, idx: int):
         sample = self.inner[idx]
 
-        start = idx * self.seq_length
-        end = start + self.seq_length
-        rho_mask = torch.from_numpy(self._mask[start:end].copy()).to(torch.float32)
-        sample["rho_mask"] = rho_mask
+        if idx < self._num_annotated_samples:
+            start = idx * self.seq_length
+            end = start + self.seq_length
+            rho_mask = torch.from_numpy(self._mask[start:end].copy()).to(torch.float32)
+        else:
+            # Out-of-range: keep all tokens (no masking for unannotated samples)
+            rho_mask = torch.ones(self.seq_length, dtype=torch.float32)
 
+        sample["rho_mask"] = rho_mask
         return sample
 
     @property
