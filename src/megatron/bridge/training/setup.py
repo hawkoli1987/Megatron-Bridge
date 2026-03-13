@@ -219,6 +219,21 @@ def setup(
         _register_pre_wrap_hook(cfg.model, peft_hook)
         print_rank_0("Registered PEFT pre-wrap hook")
 
+    # Register HuggingFace loading hook if hf_pretrained_checkpoint is specified
+    hf_path = getattr(cfg.checkpoint, 'hf_pretrained_checkpoint', None)
+    if hf_path is not None:
+        hf_hook = _create_hf_loading_hook(cfg, state)
+        cfg.model.register_pre_wrap_hook(hf_hook)
+        print_rank_0(f"Registered HuggingFace loading pre-wrap hook (hf_path={hf_path})")
+
+    # Register non-MTP freezing hook if MTP warmup mode is active
+    if (getattr(cfg.model, 'mtp_enabled', False)
+            and getattr(cfg.model, 'mtp_num_layers', 0) > 0
+            and getattr(cfg.model, 'freeze_non_mtp', False)):
+        non_mtp_hook = _create_non_mtp_freezing_hook(cfg)
+        cfg.model.register_pre_wrap_hook(non_mtp_hook)
+        print_rank_0("Registered non-MTP freezing pre-wrap hook")
+
     if getattr(cfg.model, "restore_modelopt_state", False):
         from megatron.bridge.training.post_training.checkpointing import load_modelopt_state
 
@@ -279,6 +294,12 @@ def setup(
             # The finetune toggle is explicitly set to True in order to avoid loading optimizer and RNG states
             # This is switched off here in order to load these states from the checkpoint
             cfg.checkpoint.finetune = False
+    elif getattr(cfg.checkpoint, 'hf_pretrained_checkpoint', None) is not None:
+        # HF weights were loaded via the pre-wrap hook; skip standard checkpoint loading
+        # unless there is also a regular checkpoint to resume from
+        should_load_checkpoint = (cfg.checkpoint.load is not None and checkpoint_exists(cfg.checkpoint.load))
+        if not should_load_checkpoint:
+            print_rank_0("Skipping standard checkpoint loading — using HuggingFace loading hook")
     else:
         should_load_checkpoint = (
             (cfg.checkpoint.load is not None and checkpoint_exists(cfg.checkpoint.load))
@@ -434,6 +455,73 @@ def _update_model_config_funcs(
     if optimizer is not None:
         model_config.finalize_model_grads_func = partial(finalize_model_grads, pg_collection=pg_collection)
         model_config.grad_scale_func = optimizer.scale_loss
+
+
+def _create_hf_loading_hook(
+    cfg: ConfigContainer, state: GlobalState
+) -> Callable[[list[MegatronModule]], list[MegatronModule]]:
+    """Create a pre-wrap hook that loads HuggingFace weights directly into Megatron model.
+
+    Loads HuggingFace checkpoints directly into the Megatron model with the
+    current configuration (including MTP layers), avoiding checkpoint
+    conversion. MTP parameters absent from the HF checkpoint are left at
+    their randomly-initialized values.
+    """
+    def hf_loading_hook(model: list[MegatronModule]) -> list[MegatronModule]:
+        from megatron.bridge.models.conversion.auto_bridge import AutoBridge
+        from megatron.bridge.models.hf_pretrained.causal_lm import PreTrainedCausalLM
+
+        hf_path = cfg.checkpoint.hf_pretrained_checkpoint
+        print_rank_0(f"Loading HuggingFace weights from: {hf_path}")
+
+        state.timers("load-hf-weights", log_level=0).start(barrier=True)
+
+        try:
+            hf_pretrained_loader = PreTrainedCausalLM.from_pretrained(
+                hf_path,
+                device="cpu",
+                torch_dtype=cfg.model.params_dtype,
+                trust_remote_code=True,
+            )
+            bridge = AutoBridge.from_hf_config(hf_pretrained_loader.config)
+            internal_model_bridge = bridge._model_bridge
+            internal_model_bridge.load_weights_hf_to_megatron(hf_pretrained_loader, model)
+            print_rank_0("Successfully loaded HuggingFace weights into Megatron model")
+        except Exception as e:
+            print_rank_0(f"Failed to load HuggingFace weights: {e}")
+            raise
+
+        state.timers("load-hf-weights", log_level=0).stop(barrier=True)
+        return model
+
+    return hf_loading_hook
+
+
+def _create_non_mtp_freezing_hook(cfg: ConfigContainer) -> Callable[[list[MegatronModule]], list[MegatronModule]]:
+    """Create a pre-wrap hook that freezes all parameters except MTP modules.
+
+    Used during MTP warmup phase to prevent randomly-initialized MTP layers
+    from destabilizing the pretrained backbone weights.
+    """
+    def non_mtp_freezing_hook(model: list[MegatronModule]) -> list[MegatronModule]:
+        print_rank_0("Applying non-MTP freezing pre-wrap hook...")
+
+        frozen_count = 0
+        unfrozen_count = 0
+
+        for model_module in model:
+            for name, param in model_module.named_parameters():
+                if 'mtp.' in name:
+                    param.requires_grad = True
+                    unfrozen_count += 1
+                else:
+                    param.requires_grad = False
+                    frozen_count += 1
+
+        print_rank_0(f"Non-MTP freezing: {frozen_count} frozen, {unfrozen_count} MTP params trainable")
+        return model
+
+    return non_mtp_freezing_hook
 
 
 def _create_peft_pre_wrap_hook(

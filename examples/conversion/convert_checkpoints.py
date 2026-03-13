@@ -153,7 +153,7 @@ def export_megatron_to_hf(
         hf_path: Directory path where the HuggingFace model will be saved
         show_progress: Display progress bar during weight export
         strict: Whether to perform strict validation during weight export
-        trust_remote_code: Whether to trust remote code when loading config
+        trust_remote_code: Allow custom model code (required for MTP architectures)
     """
     print(f"🔄 Starting export: {megatron_path} -> {hf_path}")
 
@@ -164,10 +164,8 @@ def export_megatron_to_hf(
     # Look for configuration files to determine the model type
     config_files = list(checkpoint_path.glob("**/run_config.yaml"))
     if not config_files:
-        # Look in iter_ subdirectories
         iter_dirs = [d for d in checkpoint_path.iterdir() if d.is_dir() and d.name.startswith("iter_")]
         if iter_dirs:
-            # Use the latest iteration
             latest_iter = max(iter_dirs, key=lambda d: int(d.name.replace("iter_", "")))
             config_files = list(latest_iter.glob("run_config.yaml"))
 
@@ -178,10 +176,41 @@ def export_megatron_to_hf(
 
     print(f"📋 Found configuration: {config_files[0]}")
 
-    # Export always uses the config synthesized from checkpoint + HF reference.
-    bridge = AutoBridge.from_auto_config(megatron_path, hf_model, trust_remote_code=trust_remote_code)
+    # For custom MTP architectures, pre-load the model class and register the bridge.
+    # Otherwise use the config-synthesis path (works for standard HF architectures).
+    dummy_model = None
+    if trust_remote_code:
+        from transformers import AutoConfig, AutoModelForCausalLM as HFAutoModelForCausalLM
+        print(f"📥 Loading custom HF model config from: {hf_model}")
+        try:
+            config = AutoConfig.from_pretrained(hf_model, trust_remote_code=True)
+            with torch.device("meta"):
+                dummy_model = HFAutoModelForCausalLM.from_config(config, trust_remote_code=True)
+            model_class = type(dummy_model)
+            print(f"✅ Detected custom class: {model_class.__name__}")
 
-    # Export using the convenience method
+            try:
+                from megatron.bridge.models.qwen.qwen3_mtp_bridge import Qwen3MTPBridge
+                Qwen3MTPBridge.register_for_custom_class(model_class)
+                print(f"🔗 Registered Qwen3MTPBridge for {model_class.__name__}")
+            except ImportError:
+                print("⚠️  Qwen3MTPBridge not available — skipping MTP bridge registration")
+        except Exception as e:
+            print(f"⚠️  Failed to pre-load custom class: {e}")
+
+        bridge = AutoBridge.from_hf_pretrained(hf_model, trust_remote_code=True)
+
+        # For new architectures, inject the full set of state_dict keys so the
+        # bridge knows about parameters absent from the original HF checkpoint
+        if dummy_model is not None:
+            try:
+                print("🛠️  Patching bridge with custom model state_dict keys...")
+                bridge.hf_pretrained.state.source.get_all_keys = lambda: list(dummy_model.state_dict().keys())
+            except Exception as e:
+                print(f"⚠️  Failed to patch state source: {e}")
+    else:
+        bridge = AutoBridge.from_auto_config(megatron_path, hf_model, trust_remote_code=False)
+
     print("📤 Exporting to HuggingFace format...")
     bridge.export_ckpt(
         megatron_path=megatron_path,
@@ -192,7 +221,6 @@ def export_megatron_to_hf(
 
     print(f"✅ Successfully exported model to: {hf_path}")
 
-    # Verify the export was created
     export_path = Path(hf_path)
     if export_path.exists():
         print("📁 Export structure:")
@@ -240,7 +268,8 @@ def main():
     export_parser.add_argument(
         "--not-strict", action="store_true", help="Allow source and target checkpoint to have different keys"
     )
-    export_parser.add_argument("--trust-remote-code", action="store_true", help="Allow custom model code execution")
+    export_parser.add_argument("--trust-remote-code", action="store_true", help="Allow custom model code execution (required for MTP)")
+
     args = parser.parse_args()
 
     if not args.command:
