@@ -1,0 +1,11 @@
+{
+  "label": "Baseline",
+  "total_tokens": 150,
+  "elapsed": 0.5857909135520458,
+  "throughput": 256.0640606226695,
+  "texts": [
+    " Also, can you explain how to solve it step by step?\n\n2 + 2 equals 4. To solve this, you start with the number 2 and add another 2 to it. Adding means combining two quantities. So, 2",
+    " Paris. The capital of Germany is Berlin. The capital of Italy is Rome. The capital of Spain is Madrid. The capital of Portugal is Lisbon. The capital of Greece is Athens. The capital of Belgium is Brussels. The capital of Netherlands is Amsterdam",
+    " 1, 2, 3, 4, 5. Then write the numbers 1 to 5 in reverse order: 5, 4, 3, 2, 1. Then write the numbers 1 to"
+  ]
+}
