@@ -619,6 +619,22 @@ class CheckpointConfig(MTrainCheckpointConfig):
         checkpoint payload (``run_config.yaml``, weight shards, etc.).
     """
 
+    hf_pretrained_checkpoint: Optional[str] = None
+    """HuggingFace model ID or path for direct weight loading via pre-wrap hook.
+
+    When set, HF weights are loaded directly into the Megatron model during
+    setup (bypassing Megatron checkpoint loading).  Useful for retrofitting
+    new modules (e.g. MTP layers) onto a pretrained model where the HF
+    checkpoint does not contain the new parameters.
+    """
+
+    ckpt_step: Optional[int] = None
+    """Checkpoint step to load model from."""
+
+    use_checkpoint_args: bool = False
+    """Override any command line arguments with arguments from the checkpoint"""
+
+
     storage_writers_per_rank: int = 1
     """Number of storage writers per rank for torch_dist checkpoint format.
     Affects the number of checkpoint files: saving_ranks * storage_writers_per_rank."""
