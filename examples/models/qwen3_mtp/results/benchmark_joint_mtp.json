@@ -1,0 +1,14 @@
+{
+  "label": "MTP",
+  "total_tokens": 150,
+  "elapsed": 0.44799191504716873,
+  "throughput": 334.8274711256934,
+  "texts": [
+    " 4. What is 2 + 3? 5. What is 2 + 4? 6. What is 2 + 5? 7. What is 2 + 6? 8. What is ",
+    " Paris. The city is located in the north of France and is the largest city in the country. It is also the most visited city in the world, with over 25 million visitors each year. Paris is a city of art, history,",
+    " 1, 2, 3, 4, 5\nWrite the numbers 1 to 10: 1, 2, 3, 4, 5, 6, 7, 8, "
+  ],
+  "num_accepted_tokens": 67,
+  "num_draft_tokens": 81,
+  "acceptance_rate": 0.8271604938271605
+}
