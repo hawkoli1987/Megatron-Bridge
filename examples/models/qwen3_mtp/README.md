@@ -24,21 +24,21 @@ This example demonstrates a 5-step pipeline:
 | `qwen3_mtp_config.py` | vLLM draft model config (`model_type="mtp"`). Used by `draft_view/`. |
 | `vllm_qwen3_mtp.py` | vLLM MTP model implementation for speculative decoding. |
 | `setup_views.py` | Splits exported HF checkpoint into `target_view/` (backbone) and `draft_view/` (MTP heads). |
-| `run_benchmark_single.py` | Throughput benchmark: baseline vs MTP speculative decoding. Reports acceptance rate. |
-| `eval_mmlu.py` | MMLU evaluation via `lm_eval`. Includes patches for NeMo 25.11 container compatibility. |
+| `run_benchmark.py` | Throughput benchmark: baseline vs MTP speculative decoding. Reports acceptance rate. |
+| `eval_mmlu.py` | MMLU evaluation via `lm_eval` with vLLM backend. |
 | `enroot_rc.sh` | Minimal RC script for enroot container entry. |
 
 The Megatron-Bridge source changes that enable this pipeline:
 
-- `src/megatron/bridge/models/qwen/qwen3_mtp_bridge.py` — MTP weight bridge
+- `src/megatron/bridge/models/qwen/qwen3_mtp_bridge.py` — MTP weight bridge (needed for **export** only; during import, the standard `Qwen3Bridge` handles backbone weights while MTP layers are randomly initialized)
 - `src/megatron/bridge/training/setup.py` — HF loading + MTP freezing hooks
 - `src/megatron/bridge/training/config.py` — `hf_pretrained_checkpoint` config
 - `examples/conversion/convert_checkpoints.py` — `--trust-remote-code` for MTP export
 
 ## Prerequisites
 
-- **Training**: NeMo container (`nemo_25.11.sif`) with Singularity
-- **Inference**: vLLM container (`vllm+vllm-openai+v0.13.0.sqsh`) with enroot
+- **Training & Export**: NeMo container (`nemo_25.11.sif`) with Singularity
+- **Evaluation & Inference**: vLLM container (`vllm+vllm-openai+v0.13.0.sqsh`) with enroot; `pip install lm_eval` inside the container for MMLU evaluation
 - **Dataset**: FineWeb-Edu 10BT (tokenized for Megatron)
 - **Hardware**: 1x NVIDIA H200 node (8 GPUs) for training; 1x H200 GPU for inference
 
@@ -52,15 +52,13 @@ torchrun --nproc_per_node=8 examples/models/qwen3_mtp/pretrain_qwen3_4b_mtp.py \
   --config-file examples/models/qwen3_mtp/conf/qwen3_4b_mtp_warmup.yaml \
   --hf-pretrained-checkpoint Qwen/Qwen3-4B \
   --freeze-non-mtp \
-  model.seq_length=4096 \
-  dataset.blend='[["path/to/tokenized/data"]]'
+  --data-path /path/to/tokenized/data_text_document
 
 # Phase 2: Joint Training (~5000 iters, all params)
 torchrun --nproc_per_node=8 examples/models/qwen3_mtp/pretrain_qwen3_4b_mtp.py \
   --config-file examples/models/qwen3_mtp/conf/qwen3_4b_mtp_joint.yaml \
   --pretrained-checkpoint /path/to/warmup/checkpoint \
-  model.seq_length=4096 \
-  dataset.blend='[["path/to/tokenized/data"]]'
+  --data-path /path/to/tokenized/data_text_document
 ```
 
 ### Step 2: Export (inside NeMo container)
@@ -81,25 +79,56 @@ python examples/models/qwen3_mtp/setup_views.py \
   --scripts-dir examples/models/qwen3_mtp
 ```
 
-### Step 4: Evaluate (inside NeMo container)
+This creates two HF-compatible checkpoint directories from the exported MTP checkpoint:
+- **`target_view/`** — backbone-only weights (MTP parameters removed), used as the verifier in speculative decoding.
+- **`draft_view/`** — MTP head weights with `modeling_qwen3_mtp.py`, `qwen3_mtp_config.py`, and `vllm_qwen3_mtp.py` copied in, plus `config.json` updated with `"auto_map": {"AutoModelForCausalLM": "modeling_qwen3_mtp.Qwen3MTPForCausalLM"}` so vLLM can load it via `trust_remote_code=True`.
+
+### Steps 4–5: Evaluate & Benchmark (inside vLLM container via enroot)
+
+Both evaluation and inference benchmarks run inside the vLLM container.
+Use `NVIDIA_DRIVER_CAPABILITIES=compute,utility` (not `all`) on headless
+compute nodes. Do **not** set `VLLM_WORKER_MULTIPROC_METHOD=spawn` — the
+default fork mode is required for CUDA to work in vLLM's subprocess.
 
 ```bash
-python examples/models/qwen3_mtp/eval_mmlu.py \
-  --model /path/to/exported/target_view --backend vllm --tp 1
-```
+export EXPORTED_HF=/path/to/exported
+export SHARED_FS=/path/to/shared/filesystem
 
-### Step 5: Benchmark (inside vLLM container via enroot)
+# MMLU evaluation
+enroot start --root --rw \
+    --rc examples/models/qwen3_mtp/enroot_rc.sh \
+    --mount="${HOME}:${HOME}" \
+    --mount="/scratch_aisg:/scratch_aisg" \
+    --mount="${SHARED_FS}:${SHARED_FS}" \
+    --mount="/tmp:/tmp" \
+    --env NVIDIA_VISIBLE_DEVICES=all \
+    --env NVIDIA_DRIVER_CAPABILITIES=compute,utility \
+    --env CUDA_VISIBLE_DEVICES=0 \
+    --env HF_HOME=${SHARED_FS}/cache/huggingface \
+    ${CONTAINER_NAME} \
+    python3 eval_mmlu.py \
+    --model ${EXPORTED_HF}/target_view --backend vllm --tp 1 \
+    --output-file /tmp/mmlu_results.json
 
-```bash
-# Baseline
-python examples/models/qwen3_mtp/run_benchmark_single.py \
-  --mode baseline --target-path /path/to/exported/target_view
+# Throughput benchmark — baseline
+enroot start --root --rw \
+    --rc examples/models/qwen3_mtp/enroot_rc.sh \
+    --mount="${HOME}:${HOME}" \
+    --mount="/scratch_aisg:/scratch_aisg" \
+    --mount="${SHARED_FS}:${SHARED_FS}" \
+    --mount="/tmp:/tmp" \
+    --env NVIDIA_VISIBLE_DEVICES=all \
+    --env NVIDIA_DRIVER_CAPABILITIES=compute,utility \
+    --env CUDA_VISIBLE_DEVICES=0 \
+    --env HF_HOME=${SHARED_FS}/cache/huggingface \
+    --env PYTHONPATH=${EXPORTED_HF}/draft_view \
+    ${CONTAINER_NAME} \
+    python3 run_benchmark.py --mode baseline \
+    --target-path ${EXPORTED_HF}/target_view \
+    --output-file /tmp/benchmark_baseline.json
 
-# MTP speculative decoding
-python examples/models/qwen3_mtp/run_benchmark_single.py \
-  --mode mtp \
-  --target-path /path/to/exported/target_view \
-  --draft-path /path/to/exported/draft_view
+# Throughput benchmark — MTP speculative decoding
+# Same as above but: --mode mtp --draft-path ${EXPORTED_HF}/draft_view
 ```
 
 ## Results (1x H200 GPU, vLLM 0.13, enforce_eager)
@@ -113,3 +142,17 @@ python examples/models/qwen3_mtp/run_benchmark_single.py \
 | MTP Speedup         | N/A               | +16.9%            | +30.4%          |
 
 See `results/` for raw benchmark and evaluation JSON outputs.
+
+## Troubleshooting
+
+### Enroot: `stat failed: /dev/nvidia-modeset: no such file or directory`
+
+Headless compute nodes lack the `nvidia-modeset` device. Use
+`NVIDIA_DRIVER_CAPABILITIES=compute,utility` instead of `all` in enroot env.
+
+### Enroot: `CUDA driver initialization failed` in EngineCore subprocess
+
+vLLM 0.13's multiprocess engine spawns a subprocess that cannot inherit the
+CUDA context inside enroot. Do **not** set `VLLM_WORKER_MULTIPROC_METHOD=spawn`.
+The default `fork` mode correctly inherits the parent's CUDA context and
+achieves full throughput.
