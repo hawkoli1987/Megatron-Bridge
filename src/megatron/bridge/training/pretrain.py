@@ -136,6 +136,21 @@ def _pretrain(
     checkpoint_manager = setup_output.checkpoint_manager
     pg_collection = setup_output.pg_collection
 
+    # Build multi-stage data rebuild function if configured.
+    multi_stage_schedule = getattr(config, '_multi_stage_schedule', None)
+    _rebuild_data_fn = None
+    if multi_stage_schedule is not None:
+        from megatron.bridge.data.loaders import rebuild_train_data_iterator
+
+        def _rebuild_data_fn(blend, phase_train_samples, consumed_in_phase):
+            return rebuild_train_data_iterator(
+                cfg=config,
+                blend=blend,
+                phase_train_samples=phase_train_samples,
+                consumed_in_phase=consumed_in_phase,
+                dp_group=pg_collection.dp,
+            )
+
     # TRAINING
     if not config.validation.skip_train:
         if state.train_state.do_train and config.train.train_iters > 0:
@@ -150,6 +165,8 @@ def _pretrain(
                 checkpoint_manager,
                 pg_collection,
                 callback_manager=callback_manager,
+                multi_stage_schedule=multi_stage_schedule,
+                rebuild_data_fn=_rebuild_data_fn,
             )
 
         barrier_and_log("after training is done")
