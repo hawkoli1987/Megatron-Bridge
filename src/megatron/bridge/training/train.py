@@ -123,6 +123,8 @@ def train(
     process_non_loss_data_func: Optional[Callable] = None,
     non_loss_data_func: Optional[Callable] = None,
     callback_manager: CallbackManager | None = None,
+    multi_stage_schedule: Optional[Any] = None,
+    rebuild_data_fn: Optional[Callable] = None,
 ) -> None:
     """Main training loop.
 
@@ -342,6 +344,19 @@ def train(
         param_sync_func = model_config.param_sync_func
         model_config.param_sync_func = None
         pre_hook_enabled = False
+
+    # Pre-compute multi-stage phase transition boundaries.
+    _phase_transition_steps = set()
+    if multi_stage_schedule is not None and rebuild_data_fn is not None:
+        _ms_seq = config.dataset.seq_length
+        _ms_gbs = train_config.global_batch_size
+        _phase_transition_steps = set(
+            multi_stage_schedule.transition_steps(_ms_seq, _ms_gbs)
+        )
+        print_rank_0(
+            f"Multi-stage training: phase transitions at steps "
+            f"{sorted(_phase_transition_steps)}"
+        )
 
     # Run training iterations till done.
     while global_state.train_state.step < train_config.train_iters:
@@ -727,6 +742,52 @@ def train(
         )
         if should_exit:
             break
+
+        # Multi-stage phase transition: rebuild data iterators with new blend.
+        if (
+            _phase_transition_steps
+            and global_state.train_state.step in _phase_transition_steps
+        ):
+            phase_idx = multi_stage_schedule.get_phase_index_at_step(
+                global_state.train_state.step, _ms_seq, _ms_gbs
+            )
+            stage = multi_stage_schedule.stages[phase_idx]
+            print_rank_0(
+                f"{'='*60}\n"
+                f"Phase transition at step {global_state.train_state.step}: "
+                f"entering stage {phase_idx + 1}/{len(multi_stage_schedule.stages)} "
+                f"({stage.name})\n"
+                f"{'='*60}"
+            )
+
+            # Save checkpoint at phase boundary.
+            save_checkpoint_and_time(
+                global_state,
+                model,
+                optimizer,
+                scheduler,
+                num_floating_point_operations_so_far,
+                checkpoint_manager,
+                train_data_iterator=train_data_iterator,
+                callback_manager=callback_manager,
+            )
+
+            # Rebuild train data iterator with the new blend.
+            new_train_iter, new_valid_iter, _ = rebuild_data_fn(
+                blend=stage.to_blend_list(),
+                phase_train_samples=multi_stage_schedule.get_phase_samples(
+                    phase_idx, _ms_seq, _ms_gbs
+                ),
+                consumed_in_phase=0,
+            )
+            train_data_iterator = new_train_iter
+            if new_valid_iter is not None:
+                valid_data_iterator = new_valid_iter
+
+            print_rank_0(
+                f"Data iterators rebuilt for stage {phase_idx + 1} "
+                f"({stage.name})"
+            )
 
     # Save final checkpoint when training completes normally and the last
     # step wasn't already persisted by the interval-based save inside
