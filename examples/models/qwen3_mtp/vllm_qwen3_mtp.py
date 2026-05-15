@@ -3,6 +3,7 @@ import torch.nn as nn
 from typing import Iterable, Dict
 from collections import defaultdict
 
+from vllm.compilation.decorators import support_torch_compile
 from vllm.config import VllmConfig
 from vllm.model_executor.layers.linear import ColumnParallelLinear
 from vllm.model_executor.layers.layernorm import RMSNorm
@@ -69,6 +70,14 @@ class Qwen3MTPLayer(nn.Module):
 
         return self.final_layernorm(hidden_states)
 
+@support_torch_compile(
+    dynamic_arg_dims={
+        "input_ids": 0,
+        "positions": -1,
+        "previous_hidden_states": 0,
+        "inputs_embeds": 0,
+    }
+)
 class Qwen3MTPBackbone(nn.Module):
     """MTP backbone with embedding and MTP layers."""
 
