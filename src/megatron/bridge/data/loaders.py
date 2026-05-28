@@ -246,6 +246,8 @@ def build_train_valid_test_data_loaders(
     dp_rank = torch.distributed.get_rank(group=dp_group)
     dp_size = torch.distributed.get_world_size(group=dp_group)
 
+    prefetch_factor = getattr(cfg.dataset, "prefetch_factor", None)
+
     # Build dataloders.
     train_dataloader = build_pretraining_data_loader(
         train_ds,
@@ -261,6 +263,7 @@ def build_train_valid_test_data_loaders(
         data_parallel_rank=dp_rank,
         data_parallel_size=dp_size,
         global_batch_size=cfg.train.global_batch_size,
+        prefetch_factor=prefetch_factor,
     )
     eval_gbs = (
         cfg.validation.eval_global_batch_size
@@ -287,6 +290,7 @@ def build_train_valid_test_data_loaders(
             data_parallel_rank=dp_rank,
             data_parallel_size=dp_size,
             global_batch_size=eval_gbs,
+            prefetch_factor=prefetch_factor,
         )
     elif cfg.validation.eval_iters > 0:
         val_dataloader_type = "cyclic" if isinstance(cfg.dataset, GPTDatasetConfig) else cfg.dataset.dataloader_type
@@ -304,6 +308,7 @@ def build_train_valid_test_data_loaders(
             data_parallel_rank=dp_rank,
             data_parallel_size=dp_size,
             global_batch_size=eval_gbs,
+            prefetch_factor=prefetch_factor,
         )
 
     if cfg.validation.eval_iters > 0:
@@ -321,6 +326,7 @@ def build_train_valid_test_data_loaders(
             data_parallel_rank=dp_rank,
             data_parallel_size=dp_size,
             global_batch_size=eval_gbs,
+            prefetch_factor=prefetch_factor,
         )
 
     # Flags to know if we need to do training/validation/testing.

@@ -25,6 +25,7 @@ def build_pretraining_data_loader(
     data_parallel_size: int = 1,
     drop_last: Optional[bool] = True,
     global_batch_size: Optional[int] = None,
+    prefetch_factor: Optional[int] = None,
 ) -> Optional[DataLoader]:
     """Build a dataloader for pretraining.
 
@@ -106,8 +107,7 @@ def build_pretraining_data_loader(
         raise Exception("{} dataloader type is not supported.".format(dataloader_type))
 
     # Torch dataloader.
-    return DataLoader(
-        dataset,
+    dl_kwargs = dict(
         batch_sampler=batch_sampler,
         num_workers=num_workers,
         pin_memory=pin_memory,
@@ -115,6 +115,9 @@ def build_pretraining_data_loader(
         persistent_workers=persistent_workers,
         worker_init_fn=worker_init_fn,
     )
+    if prefetch_factor is not None and num_workers > 0:
+        dl_kwargs["prefetch_factor"] = prefetch_factor
+    return DataLoader(dataset, **dl_kwargs)
 
 
 class MegatronPretrainingSampler:
