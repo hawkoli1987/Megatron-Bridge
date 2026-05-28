@@ -22,5 +22,5 @@ logger:
 
 checkpoint:
   save_interval: 5
-  save: /scratch_aisg/SPEC-SF-AISG/ckpt/mb/mtp2/smoke-native-warmup
-  load: /scratch_aisg/SPEC-SF-AISG/ckpt/mb/mtp2/smoke-native-warmup
+  save: /mnt/weka/aisg/ckpt/mb/mtp/mtp4/warmup
+  load: /mnt/weka/aisg/ckpt/mb/mtp/mtp4/warmup

@@ -1,0 +1,26 @@
+# Smoke test: MTP Joint — quick 5-iteration test (phase 2, all params unfrozen)
+model:
+  mtp_num_layers: 1
+  mtp_loss_scaling_factor: 0.1
+  tensor_model_parallel_size: 1
+
+train:
+  train_iters: 10
+  global_batch_size: 32
+  micro_batch_size: 1
+
+optimizer:
+  lr: 0.00005
+  min_lr: 0.000005
+
+scheduler:
+  lr_warmup_iters: 2
+  lr_decay_style: cosine
+
+logger:
+  log_interval: 1
+
+checkpoint:
+  save_interval: 5
+  save: /mnt/weka/aisg/ckpt/mb/mtp/mtp4/joint
+  load: /mnt/weka/aisg/ckpt/mb/mtp/mtp4/joint

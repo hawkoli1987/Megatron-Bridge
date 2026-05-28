@@ -189,12 +189,20 @@ def export_megatron_to_hf(
             model_class = type(dummy_model)
             print(f"✅ Detected custom class: {model_class.__name__}")
 
+            cls_name = model_class.__name__
             try:
-                from megatron.bridge.models.qwen.qwen3_mtp_bridge import Qwen3MTPBridge
-                Qwen3MTPBridge.register_for_custom_class(model_class)
-                print(f"🔗 Registered Qwen3MTPBridge for {model_class.__name__}")
-            except ImportError:
-                print("⚠️  Qwen3MTPBridge not available — skipping MTP bridge registration")
+                if "NemotronH" in cls_name:
+                    from megatron.bridge.models.nemotronh.nemotron_3_nano_4b_mtp_bridge import (
+                        NemotronHMTPBridge,
+                    )
+                    NemotronHMTPBridge.register_for_custom_class(model_class)
+                    print(f"🔗 Registered NemotronHMTPBridge for {cls_name}")
+                else:
+                    from megatron.bridge.models.qwen.qwen3_mtp_bridge import Qwen3MTPBridge
+                    Qwen3MTPBridge.register_for_custom_class(model_class)
+                    print(f"🔗 Registered Qwen3MTPBridge for {cls_name}")
+            except ImportError as ie:
+                print(f"⚠️  MTP bridge not available — skipping registration: {ie}")
         except Exception as e:
             print(f"⚠️  Failed to pre-load custom class: {e}")
 

@@ -1,0 +1,34 @@
+# Smoke test: Nemotron-3-Nano-4B MTP warmup — 5 iters, backbone frozen.
+model:
+  mtp_num_layers: 4
+  mtp_hybrid_override_pattern: "*-"
+  mtp_loss_scaling_factor: 0.3
+  tensor_model_parallel_size: 1
+
+train:
+  train_iters: 5
+  global_batch_size: 32
+  micro_batch_size: 1
+
+validation:
+  eval_iters: 0
+  eval_interval: 1000000
+
+dataset:
+  split: "98,1,1"
+
+optimizer:
+  lr: 0.0001
+  min_lr: 0.00001
+
+scheduler:
+  lr_warmup_iters: 2
+  lr_decay_style: cosine
+
+logger:
+  log_interval: 1
+
+checkpoint:
+  save_interval: 5
+  save: /mnt/weka/aisg/ckpt/mb/mtp/nemotron3_nano_4b_mtp/warmup
+  load: /mnt/weka/aisg/ckpt/mb/mtp/nemotron3_nano_4b_mtp/warmup
