@@ -27,11 +27,12 @@ from typing_extensions import Unpack
 
 from megatron.bridge import AutoBridge
 from megatron.bridge.peft.base import PEFT
-from megatron.bridge.recipes.common import _peft_common_vlm, _sft_common_vlm
+from megatron.bridge.recipes.common import _peft_common_vlm, _pretrain_common, _sft_common_vlm
 from megatron.bridge.recipes.qwen_vl.qwen3_vl import Qwen3VLCommonKwargs, _qwen3_vl_common
 from megatron.bridge.recipes.utils.finetune_utils import default_peft_config
 from megatron.bridge.recipes.utils.optimizer_utils import distributed_fused_adam_with_cosine_annealing
-from megatron.bridge.training.config import ConfigContainer
+from megatron.bridge.recipes.utils.tokenizer_utils import DEFAULT_NULL_TOKENIZER_VOCAB_SIZE
+from megatron.bridge.training.config import ConfigContainer, TokenizerConfig
 
 
 # =============================================================================
@@ -619,4 +620,57 @@ def qwen35_vl_397b_a17b_peft_config(
     _qwen35_vl_apply_peft_scheme(cfg, peft_scheme)
     _qwen35_vl_apply_common(cfg, hf_path, tp=2, pp=1, max_lr=2e-4, min_lr=3e-5)
     _qwen35_vl_apply_moe(cfg, ep=32)
+    return cfg
+
+
+def qwen35_vl_4b_text_cpt_pretrain_config(hf_path: str = "Qwen/Qwen3.5-4B-Base") -> ConfigContainer:
+    """Text-only continued-pretraining config for Qwen3.5-VL 4B.
+
+    Builds the Qwen3.5-VL 4B model with the vision tower + projector frozen
+    so the GPT text-pretraining loop trains only the language backbone on
+    pretokenized .bin/.idx data (NullTokenizer). The resulting checkpoint
+    can later be loaded as a HF VL model since the vision branch weights
+    are preserved unchanged.
+
+    Recommended parallelism: TP=4, PP=1 (num_kv_heads=4 caps TP at 4).
+    """
+    cfg = _pretrain_common()
+
+    cfg.model = AutoBridge.from_hf_pretrained(hf_path).to_megatron_provider(load_weights=True)
+    cfg.model.tensor_model_parallel_size = 4
+    cfg.model.pipeline_model_parallel_size = 1
+    cfg.model.pipeline_dtype = None
+    cfg.model.virtual_pipeline_model_parallel_size = None
+    cfg.model.context_parallel_size = 1
+    cfg.model.sequence_parallel = False
+    cfg.model.seq_length = 8192
+    cfg.model.init_method_std = 0.02
+
+    cfg.model.freeze_language_model = False
+    cfg.model.freeze_vision_model = True
+    cfg.model.freeze_vision_projection = True
+
+    cfg.model.transformer_impl = "transformer_engine"
+    cfg.model.cuda_graph_impl = "none"
+    cfg.model.attention_backend = None
+    cfg.model.cross_entropy_loss_fusion = True
+    cfg.model.cross_entropy_fusion_impl = "te"
+
+    cfg.tokenizer = TokenizerConfig(
+        tokenizer_type="NullTokenizer",
+        vocab_size=DEFAULT_NULL_TOKENIZER_VOCAB_SIZE,
+    )
+
+    cfg.dataset.seq_length = 8192
+    cfg.dataset.num_workers = 8
+
+    cfg.train.manual_gc = True
+    cfg.train.manual_gc_interval = 100
+
+    cfg.ddp.use_megatron_fsdp = False
+    cfg.ddp.overlap_grad_reduce = True
+    cfg.ddp.overlap_param_gather = True
+    cfg.ddp.check_for_nan_in_grad = True
+    cfg.ddp.use_distributed_optimizer = True
+
     return cfg
