@@ -114,13 +114,15 @@ def rebuild_train_data_iterator(
 ) -> tuple:
     """Rebuild the train data iterator for a new multi-stage phase.
 
-    Creates a fresh dataset with the given blend, sized for the phase,
-    with the sampler starting at consumed_in_phase.  Valid/test iterators
-    are NOT rebuilt (they don't change between phases).
+    Multi-stage always runs in blend_per_split mode (train and val live in
+    separate slots). We rebuild only slot 0 (train) with the new phase's blend
+    and leave slot 1 (val) and slot 2 (test) untouched. provider() below asks
+    for (train, 0, 0) samples, so MCore skips rebuilding val/test even though
+    their blends are still present in blend_per_split.
 
     Args:
-        cfg: The main configuration container (dataset.blend will be mutated).
-        blend: Flat blend list [weight1, path1, weight2, path2, ...].
+        cfg: The main configuration container (dataset.blend_per_split[0] mutated).
+        blend: Flat blend list [weight1, path1, weight2, path2, ...] for the new stage.
         phase_train_samples: Total training samples for this phase.
         consumed_in_phase: Samples already consumed in this phase (0 for fresh start).
         dp_group: Data-parallel process group.
@@ -130,9 +132,15 @@ def rebuild_train_data_iterator(
     """
     from megatron.bridge.data.utils import get_dataset_provider
 
-    # Update blend in config
-    cfg.dataset.blend = get_blend_from_list(blend)
-    cfg.dataset.blend_per_split = None
+    assert cfg.dataset.blend_per_split is not None, (
+        "rebuild_train_data_iterator expects blend_per_split mode (set up by "
+        "apply_multi_stage_config). cfg.dataset.blend_per_split is None."
+    )
+    cfg.dataset.blend_per_split = [
+        get_blend_from_list(blend),         # new stage's train blend
+        cfg.dataset.blend_per_split[1],     # untouched val
+        cfg.dataset.blend_per_split[2],     # untouched test (typically None)
+    ]
 
     # Get dataset provider for updated config
     provider = get_dataset_provider(cfg.dataset)
