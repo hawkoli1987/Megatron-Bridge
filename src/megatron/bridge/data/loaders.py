@@ -306,6 +306,23 @@ def build_train_valid_test_data_loaders(
             f"train dataset size ({len(train_ds)}) < global batch size ({cfg.train.global_batch_size})."
         )
 
+    if getattr(cfg.train, "rho_filtering", False) and train_ds is not None:
+        from megatron.bridge.data.rho_filtered_dataset import RhoFilteredGPTDataset
+
+        filter_path = cfg.train.rho_filter_path
+        assert filter_path, "rho_filtering=True requires rho_filter_path to be set"
+        print_rank_0(f"> wrapping train dataset with RhoFilteredGPTDataset (filter={filter_path})")
+        train_ds = RhoFilteredGPTDataset(train_ds, filter_path)
+
+    if getattr(cfg.train, "rho_masking", False) and train_ds is not None:
+        from megatron.bridge.data.rho_masked_dataset import RhoMaskedGPTDataset
+
+        mask_path = cfg.train.rho_mask_path
+        assert mask_path, "rho_masking=True requires rho_mask_path to be set"
+        seq_length = cfg.dataset.seq_length
+        print_rank_0(f"> wrapping train dataset with RhoMaskedGPTDataset (mask={mask_path})")
+        train_ds = RhoMaskedGPTDataset(train_ds, mask_path, seq_length)
+
     exit_signal = cfg.train.exit_signal
 
     def worker_init_fn(_):
