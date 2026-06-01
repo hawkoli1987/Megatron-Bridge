@@ -105,6 +105,75 @@ def cyclic_iter(iter: Iterable) -> Iterator:
             yield x
 
 
+def rebuild_train_data_iterator(
+    cfg: ConfigContainer,
+    blend: list,
+    phase_train_samples: int,
+    consumed_in_phase: int,
+    dp_group: torch.distributed.ProcessGroup,
+) -> tuple:
+    """Rebuild the train data iterator for a new multi-stage phase.
+
+    Multi-stage always runs in blend_per_split mode (train and val live in
+    separate slots). We rebuild only slot 0 (train) with the new phase's blend
+    and leave slot 1 (val) and slot 2 (test) untouched. provider() below asks
+    for (train, 0, 0) samples, so MCore skips rebuilding val/test even though
+    their blends are still present in blend_per_split.
+
+    Args:
+        cfg: The main configuration container (dataset.blend_per_split[0] mutated).
+        blend: Flat blend list [weight1, path1, weight2, path2, ...] for the new stage.
+        phase_train_samples: Total training samples for this phase.
+        consumed_in_phase: Samples already consumed in this phase (0 for fresh start).
+        dp_group: Data-parallel process group.
+
+    Returns:
+        (train_data_iterator, None, None) — only train iterator is rebuilt.
+    """
+    from megatron.bridge.data.utils import get_dataset_provider
+
+    assert cfg.dataset.blend_per_split is not None, (
+        "rebuild_train_data_iterator expects blend_per_split mode (set up by "
+        "apply_multi_stage_config). cfg.dataset.blend_per_split is None."
+    )
+    cfg.dataset.blend_per_split = [
+        get_blend_from_list(blend),         # new stage's train blend
+        cfg.dataset.blend_per_split[1],     # untouched val
+        cfg.dataset.blend_per_split[2],     # untouched test (typically None)
+    ]
+
+    # Get dataset provider for updated config
+    provider = get_dataset_provider(cfg.dataset)
+
+    # Build dataset with phase-specific sample count
+    print_rank_0(f"> rebuilding train dataset for phase: {phase_train_samples} samples")
+    train_ds, _, _ = provider((phase_train_samples, 0, 0), cfg.dataset)
+
+    dp_rank = torch.distributed.get_rank(group=dp_group)
+    dp_size = torch.distributed.get_world_size(group=dp_group)
+
+    # Build dataloader starting at consumed_in_phase
+    train_dataloader = build_pretraining_data_loader(
+        train_ds,
+        consumed_in_phase,
+        cfg.dataset.dataloader_type,
+        cfg.train.micro_batch_size,
+        cfg.dataset.num_workers,
+        cfg.dataset.data_sharding,
+        pin_memory=cfg.dataset.pin_memory,
+        persistent_workers=cfg.dataset.persistent_workers,
+        data_parallel_rank=dp_rank,
+        data_parallel_size=dp_size,
+        global_batch_size=cfg.train.global_batch_size,
+    )
+
+    # Wrap in cyclic iterator + RerunDataIterator
+    train_iter = iter(cyclic_iter(train_dataloader))
+    train_data_iterator = RerunDataIterator(train_iter)
+
+    return train_data_iterator, None, None
+
+
 def get_train_valid_test_num_samples(cfg: ConfigContainer) -> tuple[int, int, int]:
     """Calculate the number of samples for train, validation, and test sets.
 
